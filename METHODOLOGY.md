@@ -2,7 +2,7 @@
 
 **Dynamic Discrete Choice Models under Behavioural Misspecification**
 
-This document describes the mathematical framework, structural estimation procedure and Monte Carlo design of the original research conducted at Heinrich Heine University Düsseldorf in 2025. The model is a finite-horizon adaptation of Rust (1987). The Python implementation revisits the original MATLAB experiments.
+This document describes the mathematical framework, structural estimation procedure and Monte Carlo design of the original research conducted at Heinrich Heine University Düsseldorf in 2025. The model is a finite-horizon adaptation of Rust (1987).
 
 [Return to repository overview](README.md)
 
