@@ -390,7 +390,7 @@ For a generic parameter with true value theta-zero, calculate the Monte Carlo me
 ```
 
 ```math
-\widehat{\operatorname{Bias}}_{\%}=100\frac{\overline{\widehat\theta}-\theta^0}{\theta^0}.
+\widehat{\mathrm{Bias}}_{\%}=100\frac{\overline{\widehat\theta}-\theta^0}{\theta^0}.
 ```
 
 The original analysis reports 95% confidence intervals to describe uncertainty across Monte Carlo repetitions. Relative bias should be interpreted carefully for small transition probabilities, where small absolute deviations can produce large percentage deviations.
