@@ -1,4 +1,4 @@
-# Methodology
+# Technical Methodology
 
 **Dynamic Discrete Choice Models under Behavioural Misspecification**
 
