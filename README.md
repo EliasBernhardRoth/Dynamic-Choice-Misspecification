@@ -241,7 +241,7 @@ Detailed information on model specification, experimental parameters and estimat
 
 This project builds on original research conducted at the Düsseldorf Institute for Competition Economics (DICE), Heinrich Heine University Düsseldorf.
 
-The underlying research was recognised with the **DCE Consult/IHK Award for Best Thesis**.
+The underlying research was recognised with the **IHK Award for Best Thesis**.
 
 ## Reference
 
