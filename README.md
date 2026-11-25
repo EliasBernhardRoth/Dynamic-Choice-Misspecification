@@ -19,6 +19,8 @@ Building on the canonical bus engine replacement model of Rust (1987), the proje
 
 A central finding is that structural estimation exhibits remarkable robustness to limited foresight: in the baseline specification, just six periods of foresight suffice to obtain estimates close to those under fully forward-looking behaviour.
 
+For the mathematical framework and detailed experimental design, see the [Technical Methodology](METHODOLOGY.md).
+
 ## The Underlying Decision Problem
 
 Consider a fleet manager who must repeatedly decide whether to maintain or replace a bus engine.
@@ -37,7 +39,7 @@ The econometrician observes decisions and realised mileage but does not directly
 
 Structural estimation requires assumptions about how agents make decisions. However, these assumptions may differ from their actual behaviour.
 
-For example, an agent with limited foresight may replace an engine less frequently because they fail to account for sufficiently distant future maintenance costs.
+For example, an agent with limited foresight may replace an engine less frequently because they do not account for sufficiently distant future maintenance costs.
 
 An econometrician who incorrectly assumes fully forward-looking behaviour may instead interpret this behaviour as evidence of higher replacement costs or lower maintenance costs.
 
@@ -49,83 +51,115 @@ The project investigates three dimensions of behavioural misspecification:
 
 | Dimension | Source of Misspecification |
 | :--- | :--- |
-| Limited foresight | Agents consider fewer future periods than assumed by the econometrician. |
 | Discount factor | Agents discount future payoffs differently from what the econometrician assumes. |
-| Subjective transition beliefs | Agents' expectations about future states differ from the objective transition probabilities. |
+| Limited foresight | Agents consider fewer future periods than assumed by the econometrician. |
+| Subjective transition beliefs | Agents' expectations about future states differ from objective transition probabilities. |
 
-Additional robustness experiments investigate whether the findings persist under alternative model parameterisations.
+Additional robustness experiments investigate whether the findings concerning limited foresight persist under alternative model parameterisations.
 
 ## Monte Carlo Experimental Design
 
-The project uses a controlled simulation-based approach to quantify estimation bias.
+The project uses a controlled simulation-based approach:
 
-1. **Specify the ground truth:** Define a model with known structural parameters and stochastic state transitions.
-2. **Solve the model:** Compute optimal decision rules under alternative behavioural assumptions.
-3. **Simulate data:** Generate individual decision trajectories and state transitions.
-4. **Estimate parameters:** Apply two-stage maximum likelihood estimation under potentially misspecified assumptions.
-5. **Evaluate accuracy:** Compare estimated parameters against their known true values.
-6. **Repeat:** Conduct Monte Carlo simulations to distinguish systematic estimation bias from sampling variability.
+1. Specify a dynamic decision-making model with known structural parameters.
+2. Solve the model under alternative behavioural assumptions.
+3. Simulate individual decisions and stochastic state transitions.
+4. Estimate structural parameters under potentially misspecified assumptions.
+5. Compare estimated parameters against their known true values.
+6. Repeat the experiment to distinguish systematic estimation bias from sampling variability.
+
+### Experimental Scale
+
+| Metric | Value |
+| :--- | ---: |
+| Simulated buses per repetition | 1,000 |
+| Decision periods per bus | 60 |
+| Discrete mileage states | 71 |
+| Monte Carlo repetitions per specification | 60 |
+| Decision observations per repetition | 60,000 |
+| Decision observations per specification | 3,600,000 |
 
 Unlike in empirical applications, the true structural parameters are known, allowing estimation bias to be directly quantified.
 
-### Computational Workflow
-
-```mermaid
-flowchart TD
-    A[Known Structural Parameters] --> B[Solve Dynamic Decision Problem]
-    B --> C[Simulate Individual Decisions]
-    C --> D[Estimate Potentially Misspecified Model]
-    D --> E[Compare Estimated and True Parameters]
-    E --> F[Quantify Estimation Bias]
-    F --> G[Aggregate Monte Carlo Results]
-```
-
 ## Key Research Findings
+
+The following findings originate from the original research.
 
 ### 1. Remarkable Robustness to Limited Foresight
 
 The most striking finding is the robustness of structural estimation to misspecification of agents' planning horizons.
 
-Despite the econometrician imposing fully forward-looking behaviour, just **six periods of foresight** suffice in the baseline specification to obtain estimates close to those under correct model specification.
+Despite the econometrician imposing fully forward-looking behaviour, just **six periods of foresight** suffice in the baseline specification for estimation bias to become statistically indistinguishable from zero.
 
-For sufficiently short planning horizons, however, the original Monte Carlo experiments reveal substantial distortions:
+For sufficiently short planning horizons, however, substantial distortions arise:
 
-- Replacement costs are overestimated by approximately **30%**.
-- Maintenance cost parameters are underestimated by up to **50%**.
+- Estimated replacement costs deviate by up to approximately **30%**.
+- Estimated maintenance cost parameters deviate by more than **50%** in some cases.
 
-Beyond a relatively short planning horizon, estimation bias becomes negligible.
+The original simulations reveal the following relationship between foresight and replacement behaviour:
 
-**Implication:** Behavioural misspecification does not necessarily translate into substantial estimation bias. Agents need not be fully forward-looking for a fully forward-looking econometric model to recover structural parameters accurately in this setting.
+| Future Periods Considered | Average Replacements per Bus |
+| ---: | ---: |
+| 0 | 5.75 |
+| 2 | 11.77 |
+| 4 | 11.56 |
+| **6** | **11.47** |
+| 8 | 11.50 |
+| 25 | 11.50 |
+| 40 | 11.50 |
+| 60 | 11.50 |
+
+From six periods onwards, average replacement behaviour closely resembles that of a fully forward-looking agent.
+
+Remarkably, this coincides with the planning horizon at which estimation bias becomes statistically indistinguishable from zero.
+
+**Implication:** Behavioural assumptions can be formally incorrect without generating substantial estimation bias, provided they remain compatible with actual decision-making behaviour.
+
+Agents do not necessarily need to be fully forward-looking for a fully forward-looking econometric model to recover structural parameters accurately.
+
+The six-period threshold is specific to the baseline calibration. Additional robustness experiments investigate this mechanism under alternative parameterisations.
 
 ### 2. Discount Factor Misspecification
 
 Incorrect assumptions about agents' intertemporal preferences systematically distort structural parameter estimates.
 
-When agents discount future payoffs more heavily than assumed by the econometrician, the model tends to overestimate replacement costs and underestimate maintenance costs.
+Even moderate deviations from the assumed discount factor generate estimation bias of approximately 20% in the original experiments.
+
+When agents discount future payoffs more heavily than assumed by the econometrician, replacement costs tend to be overestimated and maintenance costs underestimated. The opposite pattern arises when agents are more future-oriented than assumed.
 
 **Implication:** Differences in intertemporal preferences can be incorrectly attributed to differences in underlying cost parameters.
 
 ### 3. Subjective Transition Beliefs
 
-Discrepancies between agents' subjective expectations and objective state transition probabilities generate particularly pronounced estimation bias.
+Discrepancies between agents' subjective expectations and objective state transition probabilities generate substantial estimation bias.
 
-**Implication:** Correctly specifying the objective evolution of economic states is not necessarily sufficient. Agents' beliefs about that evolution also matter for structural estimation.
+A particularly important finding is that utility parameter distortions can arise precisely because correctly estimated objective transition probabilities are used to model decisions that are actually based on different subjective expectations.
+
+**Implication:** Accurately estimating the objective stochastic environment is not sufficient when agents make decisions based on different beliefs about that environment.
 
 ### 4. Robustness of Transition Parameter Estimation
 
-While behavioural misspecification can substantially distort utility parameter estimates, the first-stage estimates of objective transition probabilities remain comparatively robust in the original experiments.
+Across all three misspecification variants, estimates of objective transition probabilities remain comparatively robust, while utility parameter estimates are considerably more sensitive.
 
-**Implication:** Different components of the structural estimation procedure exhibit different degrees of sensitivity to misspecification.
+**Implication:** Different components of the structural estimation procedure exhibit different degrees of sensitivity to behavioural misspecification.
+
+### Central Conclusion
+
+The consequences of model misspecification depend not merely on whether assumptions are formally correct, but on whether the behaviour implied by those assumptions is compatible with the actual data-generating process.
+
+This distinction is fundamental to understanding when structural estimation remains reliable despite imperfect modelling assumptions.
 
 ## Selected Results
 
+The following figures are generated by the Python implementation.
+
 ### Limited Foresight
 
-![Limited Foresight](figures/R60/variant1_utility.png)
+![Limited Foresight](figures/R60/variant2_utility.png)
 
 ### Discount Factor Misspecification
 
-![Discount Factor](figures/R60/variant2_utility.png)
+![Discount Factor Misspecification](figures/R60/variant1_utility.png)
 
 ### Subjective Transition Beliefs
 
@@ -135,28 +169,32 @@ While behavioural misspecification can substantially distort utility parameter e
 
 ![Robustness Analysis](figures/R60/robustness_utility.png)
 
-Additional parameter estimates, replacement frequencies, figures and statistical tables are available in the corresponding repository directories.
+Additional transition parameter estimates, replacement frequencies and statistical tables are available in the [figures](figures/), [results](results/) and [tables](tables/) directories.
 
 ## Computational Methodology
 
 The project combines methods from statistical inference, numerical optimisation and computational economics:
 
 - Dynamic programming and Bellman equations
-- Backward induction and value function computation
+- Backward induction
 - Markovian state transitions
 - Stochastic simulation
-- Discrete choice probability modelling
 - Two-stage maximum likelihood estimation
 - Numerical optimisation
-- Monte Carlo simulation
+- Monte Carlo analysis
 - Sensitivity analysis and robustness testing
 
 The modular implementation separates model specification, numerical solution, simulation, estimation and statistical evaluation, facilitating systematic counterfactual experiments and model extensions.
+
+For the complete mathematical derivations, model assumptions, parameter calibration and estimation algorithms, see the [Technical Methodology](METHODOLOGY.md).
 
 ## Repository Structure
 
 ```text
 .
+├── README.md
+├── METHODOLOGY.md
+│
 ├── config.py
 ├── model.py
 ├── solver.py
@@ -165,64 +203,45 @@ The modular implementation separates model specification, numerical solution, si
 ├── simulation.py
 ├── estimation.py
 ├── utility_estimation.py
+│
 ├── monte_carlo_variant1.py
 ├── monte_carlo_variant2.py
 ├── monte_carlo_variant3.py
 ├── monte_carlo_robustness.py
+│
 ├── plot_results.py
 ├── plot_appendix.py
+│
 ├── figures/
 ├── results/
 └── tables/
 ```
 
-| Component | Purpose |
-| :--- | :--- |
-| Model and solver | Model specification and dynamic optimisation |
-| Transitions and simulation | Stochastic data generation |
-| Estimation | Structural parameter recovery |
-| Monte Carlo experiments | Quantification of estimation bias |
-| Robustness experiments | Sensitivity to alternative parameterisations |
-| Plotting | Statistical visualisation |
-| Results and tables | Simulation outputs and aggregated estimates |
-
 ## Technology Stack
 
-| Technology | Application |
-| :--- | :--- |
-| Python | Computational implementation |
-| NumPy | Numerical computation |
-| SciPy | Numerical optimisation and statistical computation |
-| pandas | Data processing and statistical aggregation |
-| Matplotlib | Research visualisation |
-| Git | Version control |
+**Python · NumPy · SciPy · pandas · Matplotlib · Git**
 
 ## Broader Relevance
 
 Although the underlying application concerns bus engine replacement, the project addresses a fundamental statistical problem: the reliability of parameter estimation when the assumed model differs from the true data-generating process.
 
-The research is relevant to:
+The research is relevant to statistical inference, sequential decision-making under uncertainty, stochastic optimisation, model risk and quantitative finance.
 
-- Statistical modelling and inference
-- Sequential decision-making under uncertainty
-- Stochastic optimisation
-- Computational economics
-- Model risk and validation
-- Quantitative finance
-
-The central objective is to understand not only whether modelling assumptions are incorrect, but also when and to what extent these errors affect statistical inference.
+Its central contribution is to investigate not only whether modelling assumptions are incorrect, but also when and to what extent such errors affect statistical inference.
 
 ## Reproducibility
 
 The repository includes the Python implementation, Monte Carlo outputs, statistical tables and research visualisations.
 
-The Python implementation revisits computational experiments originally developed in MATLAB. The findings reported above originate from the original research. Numerical differences may arise from random number generation, optimisation routines and implementation details.
+The Python implementation revisits computational experiments originally developed in MATLAB, with visualisations originally produced in R.
 
-Exact numerical agreement with the original results is not claimed.
+The research findings reported above originate from the original study. Numerical differences may arise from random number generation, optimisation routines and implementation details. Exact numerical agreement with the original results is not claimed.
+
+Detailed information on model specification, experimental parameters and estimation procedures is available in the [Technical Methodology](METHODOLOGY.md).
 
 ## Academic Background
 
-This project builds on original research conducted at Heinrich Heine University Düsseldorf.
+This project builds on original research conducted at the Düsseldorf Institute for Competition Economics (DICE), Heinrich Heine University Düsseldorf.
 
 The underlying research was recognised with the **DCE Consult/IHK Award for Best Thesis**.
 
