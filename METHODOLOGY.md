@@ -6,6 +6,8 @@ This document describes the mathematical framework, structural estimation proced
 
 [Return to repository overview](README.md)
 
+<br>
+
 ## 1. Model specification
 
 ### Decision environment
@@ -62,6 +64,8 @@ Replacing the engine resets mileage, so maintenance costs in the replacement per
 
 The normalisation of maintenance costs at zero mileage and the restriction that replacement costs do not depend on mileage are part of the original utility specification. The utility shocks are independently and identically distributed Type I Extreme Value (Gumbel) shocks, with the usual scale normalisation.
 
+<br>
+
 ## 2. Stochastic state dynamics
 
 The state follows a first-order Markov process: the conditional distribution of the next state depends only on the current state and action. Future utility shocks evolve independently of the observable state transitions:
@@ -87,6 +91,8 @@ Monthly mileage increments take one of three values:
 | 5,000 km | 0.5953 |
 | 10,000 km | 0.0128 |
 
+<br>
+
 Away from the upper boundary of the state grid, the state transition is
 
 ```math
@@ -105,6 +111,8 @@ Writing the action-specific transition probabilities as matrices gives
 ```math
 P_a(x,x')=f_x(x'\mid x,a),\qquad \sum_{x'\in\mathcal X}P_a(x,x')=1.
 ```
+
+<br>
 
 ## 3. Dynamic optimisation
 
@@ -164,6 +172,8 @@ For numerical implementation, the conditional value recursion can equivalently b
 
 This matrix expression is an equivalent reformulation of the original scalar equations.
 
+<br>
+
 ## 4. Numerical solution by backward induction
 
 Unlike the infinite-horizon model of Rust (1987), the finite-horizon specification can be solved by backward induction.
@@ -189,6 +199,8 @@ v_t(x,a)&=u(x,a)+\beta\sum_{x'}P_a(x,x')\overline V_{t+1}(x'),\\
 <br>
 
 The recursion yields value functions for every combination of state, action and period.
+
+<br>
 
 ## 5. Conditional choice probabilities
 
@@ -217,6 +229,8 @@ For the binary replacement decision, this simplifies to
 <br>
 
 The replacement probability depends on the difference between the expected lifetime utilities of the two alternatives, not on their absolute levels. Incorrect assumptions about continuation utility can therefore distort the predicted choice probabilities.
+
+<br>
 
 ## 6. Structural parameter estimation
 
@@ -283,7 +297,11 @@ Choice probabilities depend on the dynamic value functions. The dynamic problem 
 | Inner recursion | Solve the dynamic decision problem by backward induction. |
 | Outer optimisation | Maximise the conditional-choice log-likelihood. |
 
+<br>
+
 This is a finite-horizon analogue of Rust's nested fixed-point approach: backward induction replaces the infinite-horizon fixed-point computation.
+
+<br>
 
 ## 7. Behavioural misspecification
 
@@ -390,6 +408,8 @@ v_t^{\mathrm{model}}(x,a)=u(x,a)+\beta\sum_{x'}\widehat P_a^{\mathrm{true}}(x,x'
 
 Consequently, even accurately estimated objective probabilities can lead to biased utility estimates when used as a substitute for subjective beliefs. This distinction is central to the original thesis.
 
+<br>
+
 ## 8. Monte Carlo experimental design
 
 ### Baseline calibration
@@ -406,6 +426,8 @@ Consequently, even accurately estimated objective probabilities can lead to bias
 | p1 | 0.5953 | Probability of 5,000 km |
 | p2 | 0.0128 | Probability of 10,000 km |
 | State-space cardinality | 71 | Discrete mileage states |
+
+<br>
 
 Each dataset contains $60,000$ decision observations. Across 60 repetitions, each specification generates $3.6$ million decision observations.
 
@@ -453,6 +475,8 @@ flowchart TD
     I --> J[Aggregate Monte Carlo results]
 ```
 
+<br>
+
 ## 9. Statistical evaluation
 
 For a generic parameter with true value theta-zero, calculate the Monte Carlo mean and its percentage deviation from the truth:
@@ -477,6 +501,8 @@ To investigate how misspecification changes behaviour, the original research als
 \overline A=\frac{1}{RN}\sum_{r=1}^{R}\sum_{i=1}^{N}\sum_{t=1}^{T}a_{it}^{(r)}.
 ```
 
+<br>
+
 ## 10. Robustness analysis
 
 The limited-foresight experiment is repeated under four alternative calibrations, varying one component at a time:
@@ -488,9 +514,13 @@ The limited-foresight experiment is repeated under four alternative calibrations
 | Alternative objective transition probabilities | (0.1, 0.3, 0.6) |
 | Greater future orientation | Agent and model discount factors = 0.99 |
 
+<br>
+
 The alternative transition distribution changes the objective data-generating process, not merely subjective beliefs. In the higher-discount-factor scenario both the agent and the econometrician use 0.99. Limited foresight remains the sole behavioural misspecification in these experiments.
 
 The analysis compares utility parameter bias and the stability of average replacement behaviour across planning horizons. These are the scenarios documented in Appendix A.1 of the original thesis.
+
+<br>
 
 ## 11. Interpretation of the original findings
 
@@ -512,6 +542,8 @@ In the original baseline experiment, utility parameter estimates are substantial
 | 25 | 11.50 |
 | 40 | 11.50 |
 | 60 | 11.50 |
+
+<br>
 
 Average replacement behaviour approximately stabilises at the same point at which detectable estimation bias disappears. The robustness experiments provide further evidence for this relationship.
 
@@ -535,6 +567,8 @@ The following equivalent reformulation clarifies the mechanism, but was not expl
 
 If limited and full foresight produce approximately equal conditional value differences, they generate approximately equal conditional choice probabilities. Exact equality across all relevant states and periods would imply identical conditional choice probabilities. Similar aggregate replacement counts alone do not establish this equality.
 
+<br>
+
 ## 12. Implementation architecture
 
 | Module | Purpose |
@@ -552,7 +586,11 @@ If limited and full foresight produce approximately equal conditional value diff
 | `monte_carlo_robustness.py` | Alternative calibrations |
 | `plot_results.py`, `plot_appendix.py` | Figures and tables |
 
+<br>
+
 The module descriptions follow the intended project structure and original variant numbering. Implementation details are defined by the Python source files.
+
+<br>
 
 ## 13. Limitations and reproducibility
 
@@ -561,6 +599,8 @@ The module descriptions follow the intended project structure and original varia
 - The simulation uses a representative agent with homogeneous behaviour and fixed subjective expectations; learning and behavioural heterogeneity are not modelled.
 - The first-stage estimation procedure relies on the simplified transition specification.
 - The absence of statistically detectable Monte Carlo bias is not a general proof of unbiasedness or consistency under misspecification.
+
+<br>
 
 ## 14. References
 
