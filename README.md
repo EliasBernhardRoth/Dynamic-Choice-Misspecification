@@ -233,8 +233,6 @@ Its central contribution is to investigate not only whether modelling assumption
 
 The repository includes the Python implementation, Monte Carlo outputs, statistical tables and research visualisations.
 
-The Python implementation revisits computational experiments originally developed in MATLAB, with visualisations originally produced in R.
-
 The research findings reported above originate from the original study. Numerical differences may arise from random number generation, optimisation routines and implementation details. Exact numerical agreement with the original results is not claimed.
 
 Detailed information on model specification, experimental parameters and estimation procedures is available in the [Technical Methodology](METHODOLOGY.md).
