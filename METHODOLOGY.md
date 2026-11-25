@@ -483,7 +483,6 @@ The module descriptions follow the intended project structure and original varia
 - The simulation uses a representative agent with homogeneous behaviour and fixed subjective expectations; learning and behavioural heterogeneity are not modelled.
 - The first-stage estimation procedure relies on the simplified transition specification.
 - The absence of statistically detectable Monte Carlo bias is not a general proof of unbiasedness or consistency under misspecification.
-- The original experiments were conducted in MATLAB and visualised in R. The Python implementation revisits these experiments; exact numerical agreement is not claimed. In particular, the maintenance-cost robustness comparison with the original Appendix A.1 requires further validation.
 
 ## 14. References
 
