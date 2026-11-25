@@ -223,7 +223,7 @@ For the complete mathematical derivations, model assumptions, parameter calibrat
 
 ## Broader Relevance
 
-Although the underlying application concerns bus engine replacement, the project addresses a fundamental statistical problem: the reliability of parameter estimation when the assumed model differs from the true data-generating process.
+Although the application concerns bus engine replacement, the project addresses a fundamental statistical problem: the reliability of parameter estimation when the assumed model differs from the true data-generating process.
 
 The research is relevant to statistical inference, sequential decision-making under uncertainty, stochastic optimisation, model risk and quantitative finance.
 
@@ -233,15 +233,13 @@ Its central contribution is to investigate not only whether modelling assumption
 
 The repository includes the Python implementation, Monte Carlo outputs, statistical tables and research visualisations.
 
-The research findings reported above originate from the original study. Numerical differences may arise from random number generation, optimisation routines and implementation details. Exact numerical agreement with the original results is not claimed.
-
 Detailed information on model specification, experimental parameters and estimation procedures is available in the [Technical Methodology](METHODOLOGY.md).
 
 ## Academic Background
 
 This project builds on original research conducted at the Düsseldorf Institute for Competition Economics (DICE), Heinrich Heine University Düsseldorf.
 
-The underlying research was recognised with the **IHK Award for Best Thesis**.
+The research was recognised with the **IHK Award for Best Thesis**.
 
 ## Reference
 
