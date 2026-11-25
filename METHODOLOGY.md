@@ -13,14 +13,14 @@ This document describes the mathematical framework, structural estimation proced
 An agent repeatedly chooses whether to maintain or replace a bus engine over a finite horizon of 60 months. The observable state is accumulated mileage since the most recent engine replacement. The decision and state spaces are
 
 ```math
-\begin{aligned}
-t &\in \{1,\ldots,T\}, \qquad T=60,\\
-a_t &\in \mathcal A=\{0,1\},\\
-x_t &\in \mathcal X=\{0,5000,\ldots,350000\}.
-\end{aligned}
+\begin{alignedat}{2}
+&t   &\quad &\in \{1,\ldots,T\}, \qquad T=60,\\
+&a_t &\quad &\in \mathcal A=\{0,1\},\\
+&x_t &\quad &\in \mathcal X=\{0,5000,\ldots,350000\}.
+\end{alignedat}
 ```
 
-Action 0 denotes maintaining the engine; action 1 denotes replacing it. The full state also includes alternative-specific utility shocks observed by the agent but not by the econometrician:
+Action $0$ denotes maintaining the engine; action $1$ denotes replacing it. The full state also includes alternative-specific utility shocks observed by the agent but not by the econometrician:
 
 ```math
 s_t=(x_t,\varepsilon_t).
@@ -142,7 +142,7 @@ This matrix expression is an equivalent reformulation of the original scalar equ
 
 Unlike the infinite-horizon model of Rust (1987), the finite-horizon specification can be solved by backward induction.
 
-**Terminal period:** No continuation utility remains after period T:
+**Terminal period:** No continuation utility remains after period $T$:
 
 ```math
 v_T(x,a)=u(x,a),\qquad \overline V_T(x)=\log\left(\sum_a\exp(u(x,a))\right).
@@ -153,8 +153,8 @@ v_T(x,a)=u(x,a),\qquad \overline V_T(x)=\log\left(\sum_a\exp(u(x,a))\right).
 ```math
 \begin{aligned}
 v_t(x,a)&=u(x,a)+\beta\sum_{x'}P_a(x,x')\overline V_{t+1}(x'),\\
-\overline V_t(x)&=\log\left(\sum_a\exp(v_t(x,a))\right),\\
-t&=T-1,\ldots,1.
+\overline V_t(x)&=\log\left(\sum_a\exp(v_t(x,a))\right),
+\qquad t=T-1,\ldots,1.
 \end{aligned}
 ```
 
@@ -198,7 +198,7 @@ Conditional on initial states, the log-likelihood consists of a state-transition
 \ell(\theta)=\ell_f(\theta_f)+\ell_a(\theta_u,\theta_f).
 ```
 
-With T observed decision periods and T-1 observed transitions per bus, the components are
+With $T$ observed decision periods and $T-1$ observed transitions per bus, the components are
 
 ```math
 \ell_f(\theta_f)=\sum_{i=1}^{N}\sum_{t=1}^{T-1}\log f_x(x_{i,t+1}\mid x_{it},a_{it};\theta_f),
@@ -214,7 +214,7 @@ The original research uses a two-stage procedure, rather than jointly maximising
 
 The first stage estimates objective transition probabilities using the relative frequencies of mileage changes in periods without engine replacement. This avoids treating the mileage reset as a natural state increment.
 
-Let n_j denote the number of eligible observations of increment j. Then
+Let $n_j$ denote the number of eligible observations of increment $j$. Then
 
 ```math
 \widehat p_j=\frac{n_j}{\sum_{k=0}^{2}n_k},\qquad \widehat\theta_f=(\widehat p_0,\widehat p_1,\widehat p_2).
@@ -241,11 +241,11 @@ This is a finite-horizon analogue of Rust's nested fixed-point approach: backwar
 
 ## 7. Behavioural misspecification
 
-The research distinguishes the behavioural assumptions governing the data-generating process from those imposed during estimation. The econometrician maintains a discount factor of 0.8, full foresight and correct beliefs about objective transitions in the main experiments. Each variant changes one behavioural dimension at a time.
+The research distinguishes the behavioural assumptions governing the data-generating process from those imposed during estimation. The econometrician maintains a discount factor of $0.8$, full foresight and correct beliefs about objective transitions in the main experiments. Each variant changes one behavioural dimension at a time.
 
 ### Variant 1: Discount factor misspecification
 
-The agent's discount factor varies over the following grid, while the econometrician fixes it at 0.8:
+The agent's discount factor varies over the following grid, while the econometrician fixes it at $0.8$:
 
 ```math
 \beta^{\mathrm{agent}}\in\{0,0.2,0.4,0.6,0.8,1\},\qquad \beta^{\mathrm{model}}=0.8.
@@ -265,7 +265,7 @@ When the econometrician overestimates the discount factor, the model predicts mo
 
 ### Variant 2: Limited foresight
 
-At each period t, a limited-foresight agent considers at most the next h periods. The effective planning horizon is
+At each period $t$, a limited-foresight agent considers at most the next h periods. The effective planning horizon is
 
 ```math
 H_t=\min\{t+h,T\}.
@@ -283,7 +283,7 @@ The investigated planning horizons are
 h\in\{0,2,4,6,8,25,40,60\}.
 ```
 
-A horizon of zero is myopic behaviour, while a horizon of 60 implies full foresight over the remaining decision periods. The agent's effective terminal period is recalculated as time advances. The econometrician always assumes full foresight in this experiment.
+A horizon of zero is myopic behaviour, while a horizon of $60$ implies full foresight over the remaining decision periods. The agent's effective terminal period is recalculated as time advances. The econometrician always assumes full foresight in this experiment.
 
 ### Variant 3: Subjective transition beliefs
 
@@ -306,7 +306,7 @@ The two extreme beliefs are
 \end{aligned}
 ```
 
-The optimistic agent increasingly expects no additional mileage; the pessimistic agent increasingly expects 10,000 km of additional mileage each month.
+The optimistic agent increasingly expects no additional mileage; the pessimistic agent increasingly expects $10,000$ km of additional mileage each month.
 
 The agent uses subjective probabilities when computing continuation utility:
 
@@ -339,7 +339,7 @@ Consequently, even accurately estimated objective probabilities can lead to bias
 | p2 | 0.0128 | Probability of 10,000 km |
 | State-space cardinality | 71 | Discrete mileage states |
 
-Each dataset contains 60,000 decision observations. Across 60 repetitions, each specification generates 3.6 million decision observations.
+Each dataset contains $60,000$ decision observations. Across 60 repetitions, each specification generates $3.6$ million decision observations.
 
 ### Synthetic data generation
 
@@ -366,7 +366,7 @@ For each behavioural specification:
 3. Estimate objective transition probabilities.
 4. Estimate utility parameters under the econometrician's maintained assumptions.
 5. Record parameter estimates and replacement counts.
-6. Repeat for R = 60 simulated panels and aggregate the results.
+6. Repeat for $R = 60$ simulated panels and aggregate the results.
 
 ```mermaid
 flowchart TD
