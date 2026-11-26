@@ -11,13 +11,13 @@
 
 When does a misspecified model still produce reliable parameter estimates?
 
-This project develops a Python framework to investigate how incorrect assumptions about dynamic decision-making under uncertainty affect statistical inference. Building on Rust's (1987) dynamic discrete choice model, it combines dynamic programming, stochastic simulation and two-stage maximum likelihood estimation in controlled Monte Carlo experiments.
+I developed a Python simulation and structural estimation framework to investigate how incorrect assumptions about dynamic decision-making under uncertainty affect parameter recovery. Based on Rust's (1987) dynamic discrete choice model, the framework combines finite-horizon dynamic programming, stochastic simulation and two-stage maximum likelihood estimation to isolate the effects of misspecification in planning horizons, discount factors and expectations about future states.
 
-**Key finding:** In the baseline calibration, a researcher who assumes fully forward-looking behaviour recovers both cost parameters with less than 1% relative bias even when agents consider only six future periods.
+**Key finding:** In the baseline calibration, assuming full foresight produces less than **1% relative bias** in both cost estimates when agents consider only six future periods. By contrast, misspecified transition beliefs can lead to replacement cost estimates that are approximately **45% too low**.
 
-This repository is my bachelor’s thesis, conducted at the Düsseldorf Institute for Competition Economics (DICE), Heinrich Heine University Düsseldorf. The thesis received the **IHK Düsseldorf Award for Best Thesis**.
+This research formed my bachelor's thesis at the Düsseldorf Institute for Competition Economics (DICE), Heinrich Heine University Düsseldorf, and received the **IHK Düsseldorf Award for Best Thesis**.
 
-[Technical methodology](METHODOLOGY.md) · [Simulation outputs](results/) · [Figures](figures/) · [Statistical tables](tables/)
+[Technical Methodology](METHODOLOGY.md) · [Simulation outputs](results/) · [Figures](figures/) · [Statistical tables](tables/)
 
 <br>
 
@@ -27,66 +27,59 @@ This repository is my bachelor’s thesis, conducted at the Düsseldorf Institut
 | :--- | ---: |
 | Simulated decision observations per specification | **3,600,000** |
 | Monte Carlo repetitions per specification | 60 |
-| Simulated buses per repetition | 1,000 |
-| Decision periods per bus | 60 |
+| Simulated buses × decision periods per repetition | 1,000 × 60 |
 | Discrete states | 71 |
 | Dimensions of misspecification | 3 |
 | Additional robustness calibrations | 4 |
 
-**Computational methods:** finite-horizon dynamic programming, backward induction, Markov transition matrices, likelihood maximisation, constrained numerical optimisation and Monte Carlo error quantification.
+**Computational methods:** finite-horizon dynamic programming, backward induction, Markov transition matrices, two-stage maximum likelihood estimation, constrained numerical optimisation and Monte Carlo error quantification.
 
 <br>
 
 ## The Decision Problem
 
-A fleet manager decides each month whether to maintain or replace a bus engine over a 60-month operating horizon. The decision involves a trade-off:
+A fleet manager decides each month whether to maintain or replace a bus engine over a 60-month operating horizon:
 
 - **Maintain:** Avoid the upfront replacement cost but incur maintenance costs that increase with accumulated mileage.
-- **Replace:** Pay the replacement cost, reset accumulated mileage and avoid maintenance costs in the current month, with potential maintenance savings in subsequent months.
+- **Replace:** Pay the replacement cost, reset mileage and avoid maintenance costs in the current month, with potential savings in subsequent months.
 
-Future mileage growth is stochastic. Each month, a bus travels either 0, 5,000 or 10,000 km. The attractiveness of replacement therefore depends on how the manager evaluates future costs and mileage growth.
+Mileage growth is stochastic: a bus travels either 0, 5,000 or 10,000 km each month. The value of replacement therefore depends on how the agent evaluates future costs and mileage growth.
 
-The researcher observes replacement decisions and realised mileage, but not the underlying structural parameters. These are recovered in two stages:
+The researcher observes choices and realised mileage but not the underlying costs. The framework estimates these in two stages:
 
-1. Estimate the objective probabilities of the three mileage increments from observed state transitions.
-2. Estimate the replacement cost (**RC**) and the maintenance cost coefficient (**$θ_c$**) from observed decisions using maximum likelihood.
+1. Estimate the objective mileage transition probabilities from observed state transitions.
+2. Estimate the replacement cost (**RC**) and maintenance cost coefficient (**θ<sub>c</sub>**) by maximising the conditional-choice likelihood under the researcher's behavioural assumptions.
 
-The central difficulty is that the second stage requires assumptions about how the agent evaluates future consequences. If these assumptions generate incorrect choice probabilities at the true cost parameters, the estimator may compensate by distorting the costs to better explain the observed decisions.
+If these assumptions are incorrect, the model may explain differences in behaviour by distorting the estimated costs rather than recovering the true structural parameters.
 
 <br>
 
 ## Selected Results
 
-Across the three main experiments, the researcher assumes a discount factor of 0.8, full foresight over the remaining operating horizon, and correct expectations about future mileage growth. Each experiment varies exactly one aspect of the agent's behaviour while keeping the researcher's assumptions unchanged.
+In the three main experiments, the researcher assumes full foresight, a discount factor of 0.8 and correct expectations about future mileage growth. Each experiment varies one aspect of the agent's behaviour while holding the remaining assumptions fixed.
 
-The figures show the relative bias of the estimated replacement cost and maintenance cost coefficient, calculated from 60 Monte Carlo repetitions per specification. Positive values indicate overestimation; negative values indicate underestimation. The error bars represent ±1.96 Monte Carlo standard errors of the estimated mean bias.
+The figures show relative parameter bias across 60 Monte Carlo repetitions per specification. Positive values indicate overestimation; negative values indicate underestimation. Error bars represent ±1.96 Monte Carlo standard errors of the estimated mean bias.
 
 ### 1. Limited Foresight
 
-**Researcher's assumption:** The agent considers all remaining months until the end of the 60-month operating horizon.
+**Researcher's assumption:** The agent considers all remaining months of the operating horizon.
 
-**Agent's actual behaviour:** At each decision, the agent considers at most the next h months. With h = 0, only immediate costs matter; with h = 60, the agent has full foresight. The discount factor and expectations about mileage growth are correctly specified.
+**Agent's actual behaviour:** The agent considers at most the next *h* months at each decision. With *h* = 0, only immediate costs matter; with *h* = 60, the agent has full foresight.
 
 ![Relative cost parameter biases across planning horizons](figures/R60/variant2_utility.png)
 
-**Intuition:** An agent who ignores the future entirely does not consider the future maintenance savings of replacing an engine. Such an agent replaces much less frequently than the researcher expects at the true cost parameters. The estimator compensates by increasing the replacement cost and decreasing the maintenance cost coefficient, making replacement less attractive in the model.
+**Intuition:** A myopic agent ignores the future maintenance savings from replacement, making replacement less attractive than the researcher predicts. The estimator compensates by raising the replacement cost and lowering the maintenance cost coefficient. At intermediate horizons, biases need not move monotonically: the likelihood depends on how choices vary with mileage and time, not merely on the overall frequency of replacement.
 
-For other short planning horizons, the pattern is not monotonic: at h = 2, for example, the agent replaces slightly more frequently than under full foresight, yet both cost parameters are overestimated. This illustrates why the average number of replacements alone cannot explain the two estimates: the likelihood also depends on how replacement probabilities vary with mileage and time.
+| Future periods considered | Replacement cost bias | Maintenance coefficient bias |
+| ---: | ---: | ---: |
+| 0 | +6.55% | −64.37% |
+| 2 | +30.45% | +39.59% |
+| 4 | −4.65% | −4.10% |
+| **6** | **+0.53%** | **+0.10%** |
+| 8 | −0.06% | +0.05% |
+| 60 (full foresight) | +0.08% | +0.06% |
 
-| Future periods considered | Replacement cost bias | Maintenance coefficient bias | Average replacements per bus (original thesis) |
-| ---: | ---: | ---: | ---: |
-| 0 | +6.55% | -64.37% | 5.75 |
-| 2 | +30.45% | +39.59% | 11.77 |
-| 4 | -4.65% | -4.10% | 11.56 |
-| **6** | **+0.53%** | **+0.10%** | **11.47** |
-| 8 | -0.06% | +0.05% | 11.50 |
-| 60 (full foresight) | +0.08% | +0.06% | 11.50 |
-
-**Key result:** Once the planning horizon is sufficiently long, extending it has little additional effect on replacement behaviour. At six future periods, replacement frequencies in the original thesis are already close to those under full foresight, and both cost biases in the Python implementation are below 1%.
-
-The intuition is that a sufficiently far-sighted agent already accounts for the future consequences that matter most for the current decision. The researcher may therefore assume full foresight without materially distorting the cost estimates, even though that assumption is formally incorrect.
-
-The original thesis reports statistically insignificant biases from six periods onwards. In the Python implementation, replacement cost bias at six periods remains statistically distinguishable from zero using the plotted interval, despite its small magnitude. The result therefore demonstrates practical robustness in this calibration, not exact unbiasedness or a universal six-period threshold.
+**Key result:** Six future periods are sufficient for both relative biases to fall below 1% in the baseline calibration. A sufficiently far-sighted agent already accounts for the future consequences that matter most for the current decision. The small replacement cost bias at six periods remains statistically distinguishable from zero using the plotted interval; the result demonstrates practical robustness, not exact unbiasedness.
 
 [Complete horizon results](results/variant2/summary_R60.csv) · [Replacement frequencies](results/variant2/replacement_counts_R60.csv)
 
@@ -96,15 +89,13 @@ The original thesis reports statistically insignificant biases from six periods 
 
 **Researcher's assumption:** The agent discounts future utility using a factor of 0.8.
 
-**Agent's actual behaviour:** The agent's discount factor varies from 0 to 1. Both the agent and the researcher consider the full remaining horizon and use the correct mileage transition probabilities, but they attach different weights to future utility.
+**Agent's actual behaviour:** The discount factor varies from 0 to 1. Both the agent and researcher use full foresight and correct mileage transition probabilities but attach different weights to future utility.
 
 ![Relative cost parameter biases under discount factor misspecification](figures/R60/variant1_utility.png)
 
-**Intuition:** When the agent's discount factor is below 0.8, future maintenance savings matter less to the agent than the researcher assumes. The researcher consequently overvalues the benefits of replacement at the true cost parameters and predicts too many replacements. In the original thesis, an agent with a discount factor of 0.6 replaces an engine 9.82 times per bus on average, compared with 11.50 under the assumed discount factor of 0.8.
+**Intuition:** When the agent discounts the future more heavily than the researcher assumes, future maintenance savings are less valuable and replacement is less attractive. The estimator raises the replacement cost and lowers the maintenance cost coefficient to explain the observed decisions. The reverse mechanism applies when the agent places more weight on the future than the researcher assumes.
 
-To reconcile the model with these decisions, the estimator increases the estimated replacement cost and decreases the estimated maintenance cost coefficient. Replacement becomes less attractive, while maintenance becomes more attractive. When the agent's discount factor exceeds 0.8, the reverse mechanism applies: the agent replaces more often than expected, and the estimator lowers replacement costs and raises the maintenance cost coefficient.
-
-**Key result:** With an actual discount factor of 0.6, the Python estimates overstate the replacement cost by **15.25%** and understate the maintenance cost coefficient by **11.31%**. The estimator confuses differences in time preferences with differences in underlying costs.
+**Key result:** At an actual discount factor of 0.6, the replacement cost is overestimated by **15.25%** and the maintenance cost coefficient is underestimated by **11.31%**. Differences in time preferences are mistaken for differences in underlying costs.
 
 [Underlying estimates](results/variant1/summary_R60.csv)
 
@@ -112,22 +103,18 @@ To reconcile the model with these decisions, the estimator increases the estimat
 
 ### 3. Subjective Transition Beliefs
 
-**Researcher's assumption:** The agent correctly anticipates future mileage growth. The researcher therefore uses the objective transition probabilities estimated from realised mileage changes to model the agent's decisions.
+**Researcher's assumption:** The agent evaluates future mileage growth using the objective transition probabilities estimated from realised mileage changes.
 
-**Agent's actual behaviour:** The agent uses subjective transition probabilities instead. Two scenarios are considered: increasingly pessimistic beliefs favouring 10,000 km of additional mileage each month, and increasingly optimistic beliefs favouring zero additional mileage. The degree of deviation α ranges from 0 (correct beliefs) to 1 (the extreme belief). Actual mileage growth continues to follow the same objective distribution in both scenarios.
+**Agent's actual behaviour:** The agent instead uses subjective beliefs that become increasingly pessimistic (favouring 10,000 km of additional mileage) or optimistic (favouring zero additional mileage). The deviation α ranges from 0 (correct beliefs) to 1 (extreme beliefs), while actual mileage growth continues to follow the objective distribution.
 
 ![Relative cost parameter biases under subjective transition beliefs](figures/R60/variant3_utility.png)
 
 **Intuition:**
 
-- **Pessimistic beliefs:** The agent expects even a newly installed engine to accumulate mileage quickly and incur high maintenance costs again soon. In this model, paying the upfront replacement cost is therefore less attractive. The agent replaces less frequently than the researcher expects. The estimator generally compensates by raising the replacement cost and lowering the maintenance cost coefficient.
-- **Optimistic beliefs:** The agent expects a new engine to remain at low mileage for longer, so replacing the existing engine promises more persistent maintenance savings. The agent replaces more frequently than the researcher expects. The estimator lowers the replacement cost and tends to raise the maintenance cost coefficient to make frequent replacement more plausible.
+- **Pessimistic beliefs:** The agent expects even a new engine to accumulate mileage quickly, reducing the value of replacement. The estimator generally compensates by raising the replacement cost and lowering the maintenance cost coefficient.
+- **Optimistic beliefs:** The agent expects a new engine to remain at low mileage for longer, increasing the value of replacement. The estimator lowers the replacement cost and tends to raise the maintenance cost coefficient.
 
-The original thesis documents these contrasting patterns: under the extreme pessimistic belief, the average number of replacements falls to 8.26 per bus; under the extreme optimistic belief, it rises to 17.69, relative to 11.50 under correct expectations.
-
-**Key result:** In the extreme optimistic scenario, the Python estimate of the replacement cost is approximately **45% too low**. The key problem is not inaccurate estimation of the objective mileage process: the first-stage estimates capture actual mileage growth, but not the subjective probabilities that determine the agent's choices.
-
-The second stage consequently uses the wrong probabilities to model expected future utility, even when the objective probabilities have been accurately estimated.
+**Key result:** Under extreme optimistic beliefs, the replacement cost estimate is approximately **45% too low**. Even accurately estimated objective transition probabilities do not reveal the subjective expectations that determine the agent's choices.
 
 [Optimistic beliefs](results/variant3/100/summary_R60.csv) · [Pessimistic beliefs](results/variant3/001/summary_R60.csv)
 
@@ -135,72 +122,41 @@ The second stage consequently uses the wrong probabilities to model expected fut
 
 ### 4. Robustness Across Calibrations
 
-**Researcher's assumption:** Full foresight, as in the baseline planning-horizon experiment.
+**Researcher's assumption:** Full foresight, with the other behavioural assumptions correctly specified.
 
-**Agent's actual behaviour:** The agent's planning horizon varies again, but the experiment is repeated under four alternative calibrations. In each case, the researcher continues to assume full foresight; the other behavioural assumptions are correctly specified.
+**Agent's actual behaviour:** The planning horizon varies again under four alternative calibrations, changing one component at a time: the maintenance coefficient (0.001), replacement cost (50), objective transition probabilities (0.1, 0.3, 0.6) or discount factor (0.99 for both agent and researcher).
 
 ![Limited-foresight robustness experiments under alternative calibrations](figures/R60/robustness_utility.png)
 
-The original thesis varies four components separately: the maintenance cost coefficient (0.001), the replacement cost (50), the objective mileage transition probabilities (0.1, 0.3, 0.6), and the discount factor (0.99 for both the agent and the researcher).
+**Intuition:** Changing costs, mileage growth or discounting changes the value of future maintenance savings and hence how much foresight matters for current decisions. The experiments examine how parameter recovery responds to these changes, rather than treating six periods as a universal threshold.
 
-**Intuition:** Changing the calibration affects the value of replacement relative to maintenance and can therefore change how far ahead an agent must look before additional foresight has little effect on decisions. The robustness experiments investigate whether the relationship between stabilising replacement behaviour and declining estimation bias persists under these alternative settings, rather than whether exactly six periods always suffice.
-
-The higher-maintenance-cost experiment in the Python implementation does not reproduce the original thesis's replacement frequencies exactly; see [Research Provenance and Limitations](#research-provenance-and-limitations).
+**Scope:** The higher-maintenance-cost experiment has a documented discrepancy with the replacement frequencies reported in the thesis; see the [comparison output](results/robustness/maintenance_cost/table_A2_comparison_R60.csv).
 
 <br>
 
 ### Why Transition Estimates Remain Robust
 
-In the first estimation stage, the researcher estimates the objective mileage transition probabilities from the relative frequencies of observed mileage increments in eligible periods without engine replacement. The actual mileage increments are generated from the same objective distribution across the main experiments, independently of the agent's discount factor, planning horizon or subjective beliefs.
+First-stage estimation uses eligible realised mileage increments without engine replacement. Across the main experiments, these increments are generated from the same objective distribution, independently of the agent's behavioural assumptions. The second-stage estimator, however, uses these probabilities together with the researcher's assumptions to explain observed choices.
 
-The second stage is different: it uses these transition probabilities together with assumptions about dynamic behaviour to estimate the cost parameters from observed choices. In particular, when subjective beliefs differ from objective probabilities, correctly recovering the latter does not recover the agent's actual expectations.
-
-**Central takeaway:** What matters for structural parameter recovery is whether the researcher's model generates choice probabilities compatible with actual behaviour at the true parameters. An assumption can be formally incorrect yet have little practical effect on estimation, as the limited-foresight experiment illustrates. Conversely, accurately estimating one component of a model does not guarantee accurate estimation of the remaining components.
+**Central takeaway:** Structural parameter recovery depends on whether the researcher's model generates choice probabilities compatible with actual behaviour at the true parameters. An assumption can be formally incorrect yet have little practical effect on estimation. Conversely, accurately estimating one component of a model does not guarantee accurate estimation of the remaining components.
 
 <br>
 
-## Model and Experimental Design
+## Computational Methods
 
-Each specification uses the same underlying stochastic decision model and known structural parameters, except for the explicitly varied calibration in the robustness experiments. The simulation and estimation stages use separate behavioural assumptions, allowing the effect of misspecification to be isolated.
+- **Dynamic programming:** Solve the agent's finite-horizon decision problem by backward induction, allowing distinct behavioural assumptions in simulation and estimation.
+- **Efficient likelihood evaluation:** Aggregate observations by action, state and period to avoid repeatedly processing the full simulated panel during optimisation.
+- **Numerical optimisation:** Rescale the maintenance coefficient to improve conditioning; use bounded L-BFGS-B optimisation with a Nelder–Mead fallback and convergence checks.
+- **Controlled Monte Carlo experiments:** Use deterministic seeds and retain repetition-level estimates, likelihood values and optimiser diagnostics.
+- **Statistical evaluation:** Quantify relative bias and Monte Carlo uncertainty, and check scenario grids and numerical outputs before generating figures.
 
-1. Solve the agent's finite-horizon dynamic problem by backward induction under the specified behavioural assumptions.
-2. Simulate a panel of choices and objective state transitions.
-3. Estimate objective transition probabilities from eligible realised mileage increments.
-4. Estimate cost parameters by maximising the conditional-choice likelihood under the researcher's maintained behavioural assumptions, solving the dynamic model for candidate cost parameters.
-5. Compare the estimates against the known true values and repeat the experiment to quantify bias and sampling variability.
-
-For the mathematical framework, parameter calibration and numerical algorithms, see the [Technical Methodology](METHODOLOGY.md).
-
-<br>
-
-## Python Implementation
-
-The code separates model specification, numerical solution, data generation, parameter estimation and statistical evaluation.
-
-| Component | Implementation |
-| :--- | :--- |
-| Dynamic programming | [solver.py](solver.py) · [limited_foresight.py](limited_foresight.py) |
-| State transition matrices | [transitions.py](transitions.py) |
-| Stochastic simulation | [simulation.py](simulation.py) |
-| Two-stage maximum likelihood | [estimation.py](estimation.py) · [utility_estimation.py](utility_estimation.py) |
-| Monte Carlo experiments | [Variant 1](monte_carlo_variant1.py) · [Variant 2](monte_carlo_variant2.py) · [Variant 3](monte_carlo_variant3.py) |
-| Robustness and visualisation | [monte_carlo_robustness.py](monte_carlo_robustness.py) · [plot_results.py](plot_results.py) · [plot_appendix.py](plot_appendix.py) |
-
-### Numerical considerations
-
-- Aggregate observations by action, state and period to avoid repeatedly processing the full panel during likelihood evaluation.
-- Rescale the maintenance coefficient to improve numerical conditioning during optimisation.
-- Use bounded L-BFGS-B optimisation with a Nelder–Mead fallback and convergence checks.
-- Use deterministic simulation seeds and retain repetition-level estimates, likelihood values and optimiser diagnostics.
-- Validate scenario grids and numerical outputs before generating figures.
-
-The methods and implementation address problems relevant to quantitative research: parameter recovery, stochastic optimisation, estimation under model risk and computational experimentation.
+For formal model specification, parameter calibration, likelihood derivations and numerical algorithms, see the [Technical Methodology](METHODOLOGY.md).
 
 <br>
 
 ## Quick Start
 
-Clone the repository and install the numerical dependencies in a Python 3 environment:
+Clone the repository and install the dependencies in a Python 3 environment:
 
 ```bash
 git clone https://github.com/EliasBernhardRoth/Dynamic-Choice-Misspecification.git
@@ -214,9 +170,9 @@ python3 -m pip install numpy scipy matplotlib
 python3 utility_estimation.py
 ```
 
-This simulates one dataset and prints the estimated and true cost parameters, initial and final negative log-likelihoods, and optimiser diagnostics.
+Simulates a dataset and reports parameter estimates, likelihood values and optimiser diagnostics.
 
-**Regenerate the figures and appendix tables from the included simulation outputs:**
+**Regenerate figures and appendix tables from saved simulation outputs:**
 
 ```bash
 python3 plot_results.py
@@ -234,44 +190,25 @@ python3 plot_results.py
 python3 plot_appendix.py
 ```
 
-The default configuration uses 60 repetitions per specification. Full experiments are computationally more demanding than the single-estimation demonstration and rewrite the corresponding output files. Experiment settings are defined in [config.py](config.py).
+The default configuration uses 60 repetitions per specification. Full experiments rewrite the corresponding output files. Experiment settings are defined in [config.py](config.py).
 
 <br>
 
 ## Repository Structure
 
-```text
-.
-├── README.md
-├── METHODOLOGY.md
-├── config.py
-├── model.py
-├── solver.py
-├── transitions.py
-├── limited_foresight.py
-├── simulation.py
-├── estimation.py
-├── utility_estimation.py
-├── monte_carlo_variant1.py
-├── monte_carlo_variant2.py
-├── monte_carlo_variant3.py
-├── monte_carlo_robustness.py
-├── plot_results.py
-├── plot_appendix.py
-├── figures/
-├── results/
-└── tables/
-```
+| Component | Files |
+| :--- | :--- |
+| Technical documentation | [METHODOLOGY.md](METHODOLOGY.md) |
+| Model specification and configuration | [model.py](model.py) · [config.py](config.py) |
+| Dynamic programming | [solver.py](solver.py) · [limited_foresight.py](limited_foresight.py) |
+| State transitions and simulation | [transitions.py](transitions.py) · [simulation.py](simulation.py) |
+| Two-stage maximum likelihood | [estimation.py](estimation.py) · [utility_estimation.py](utility_estimation.py) |
+| Monte Carlo experiments | [Variant 1](monte_carlo_variant1.py) · [Variant 2](monte_carlo_variant2.py) · [Variant 3](monte_carlo_variant3.py) |
+| Robustness experiments | [monte_carlo_robustness.py](monte_carlo_robustness.py) |
+| Figures and appendix tables | [plot_results.py](plot_results.py) · [plot_appendix.py](plot_appendix.py) |
+| Research outputs | [figures/](figures/) · [results/](results/) · [tables/](tables/) |
 
 **Technology stack:** Python · NumPy · SciPy · Matplotlib · Git
-
-<br>
-
-## Research Provenance and Limitations
-
-The figures and percentage biases reported above are from the Python implementation; the replacement frequencies explicitly attributed to the original thesis are from its Table 1 and Appendix A.2. The original simulations were conducted in MATLAB, with figures prepared in R. The implementation uses the documented model calibrations; exact numerical agreement with the original experiments is not assumed. In particular, the higher-maintenance-cost robustness experiment does not reproduce the replacement frequencies reported in the original Table A2. The discrepancy is retained in the [comparison output](results/robustness/maintenance_cost/table_A2_comparison_R60.csv).
-
-The interpretation follows Sections 3–5 and Appendix A of the original thesis. For mathematical derivations, parameter values and estimation procedures, see the [Technical Methodology](METHODOLOGY.md).
 
 <br>
 
