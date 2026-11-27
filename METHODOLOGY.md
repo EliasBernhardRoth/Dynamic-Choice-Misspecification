@@ -13,11 +13,11 @@ This document describes the mathematical model, numerical solution and Monte Car
 An agent chooses each month whether to maintain or replace a bus engine over a finite horizon of 60 months. The observable state is accumulated mileage since the last replacement.
 
 ```math
-\begin{aligned}
-t&\in\{1,\ldots,T\},\qquad T=60,\\
-a_t&\in\mathcal A=\{0,1\},\\
-x_t&\in\mathcal X=\{0,5000,\ldots,350000\}.
-\end{aligned}
+\begin{alignedat}{2}
+&t &\quad &\in\{1,\ldots,T\},\qquad T=60,\\
+&a_t &\quad &\in\mathcal A=\{0,1\},\\
+&x_t &\quad &\in\mathcal X=\{0,5000,\ldots,350000\}.
+\end{alignedat}
 ```
 
 <br>
@@ -132,10 +132,10 @@ v_t(x,a)=u(x,a)+\beta\sum_{x'\in\mathcal X}P_a(x,x')\overline V_{t+1}(x').
 The ex-ante value function integrates over the current shocks. Under the Gumbel assumption,
 
 ```math
-\begin{aligned}
-\overline V_t(x)&=\mathbb E_\varepsilon\left[\max_a\{v_t(x,a)+\varepsilon(a)\}\right]\\
-&=\log\left(\sum_{a\in\mathcal A}\exp(v_t(x,a))\right).
-\end{aligned}
+\begin{alignedat}{2}
+&\overline V_t(x) &\quad &=\mathbb E_\varepsilon\left[\max_a\{v_t(x,a)+\varepsilon(a)\}\right]\\
+& &\quad &=\log\left(\sum_{a\in\mathcal A}\exp(v_t(x,a))\right).
+\end{alignedat}
 ```
 
 <br>
@@ -186,15 +186,15 @@ Choice probabilities depend on the difference between the two choice-specific va
 For numerical stability, the implementation calculates both log choice probabilities directly:
 
 ```math
-\begin{aligned}
-\log\Pr_t(0\mid x)&=-\operatorname{logaddexp}(0,v_t(x,1)-v_t(x,0)),\\
-\log\Pr_t(1\mid x)&=-\operatorname{logaddexp}(0,v_t(x,0)-v_t(x,1)).
-\end{aligned}
+\begin{alignedat}{2}
+&\log\Pr_t(0\mid x) &\quad &=-\log\left(1+\exp(v_t(x,1)-v_t(x,0))\right),\\
+&\log\Pr_t(1\mid x) &\quad &=-\log\left(1+\exp(v_t(x,0)-v_t(x,1))\right).
+\end{alignedat}
 ```
 
 <br>
 
-Here, $\operatorname{logaddexp}(b,c)=\log(e^b+e^c)$ is evaluated using a numerically stable algorithm. This avoids overflow from direct exponentiation and taking the logarithm of probabilities that may have rounded to zero during numerical optimisation.
+These expressions are evaluated using NumPy's `np.logaddexp` function to avoid numerical overflow and taking the logarithm of probabilities that may have rounded to zero during numerical optimisation.
 
 <br>
 
@@ -203,11 +203,11 @@ Here, $\operatorname{logaddexp}(b,c)=\log(e^b+e^c)$ is evaluated using a numeric
 The econometrician observes decisions and realised mileage but not the underlying parameters $\theta=(\theta_f,\theta_u)$. Conditional on the initial states, the full log-likelihood decomposes into a state-transition and a conditional-choice component:
 
 ```math
-\begin{aligned}
-\ell(\theta)&=\ell_f(\theta_f)+\ell_a(\theta_u,\theta_f),\\
-\ell_f(\theta_f)&=\sum_{i=1}^{N}\sum_{t=1}^{T}\log f_x(x_{i,t+1}\mid x_{it},a_{it};\theta_f),\\
-\ell_a(\theta_u,\theta_f)&=\sum_{i=1}^{N}\sum_{t=1}^{T}\log\Pr_t(a_{it}\mid x_{it};\theta_u,\theta_f).
-\end{aligned}
+\begin{alignedat}{2}
+&\ell(\theta) &\quad &=\ell_f(\theta_f)+\ell_a(\theta_u,\theta_f),\\
+&\ell_f(\theta_f) &\quad &=\sum_{i=1}^{N}\sum_{t=1}^{T}\log f_x(x_{i,t+1}\mid x_{it},a_{it};\theta_f),\\
+&\ell_a(\theta_u,\theta_f) &\quad &=\sum_{i=1}^{N}\sum_{t=1}^{T}\log\Pr_t(a_{it}\mid x_{it};\theta_u,\theta_f).
+\end{alignedat}
 ```
 
 <br>
@@ -327,10 +327,10 @@ The optimistic agent increasingly expects zero additional mileage; the pessimist
 The distinction can be expressed directly in the continuation-value term. The agent uses subjective transition matrices, whereas the econometrician uses the matrices constructed from estimated objective probabilities:
 
 ```math
-\begin{aligned}
-v_t^{\mathrm{agent}}(x,a)&=u(x,a)+\beta\sum_{x'}P_a^{\mathrm{agent}}(x,x')\overline V_{t+1}^{\mathrm{agent}}(x'),\\
-v_t^{\mathrm{model}}(x,a)&=u(x,a)+\beta\sum_{x'}\widehat P_a^{\mathrm{true}}(x,x')\overline V_{t+1}^{\mathrm{model}}(x').
-\end{aligned}
+\begin{alignedat}{2}
+&v_t^{\mathrm{agent}}(x,a) &\quad &=u(x,a)+\beta\sum_{x'}P_a^{\mathrm{agent}}(x,x')\overline V_{t+1}^{\mathrm{agent}}(x'),\\
+&v_t^{\mathrm{model}}(x,a) &\quad &=u(x,a)+\beta\sum_{x'}\widehat P_a^{\mathrm{true}}(x,x')\overline V_{t+1}^{\mathrm{model}}(x').
+\end{alignedat}
 ```
 
 <br>
@@ -396,10 +396,10 @@ The experiments use deterministic seeds: the repetition index plus 1,000 times t
 For a parameter with true value $\theta^0$, the Monte Carlo mean and relative bias are
 
 ```math
-\begin{aligned}
-\overline{\widehat\theta}&=\frac{1}{R}\sum_{r=1}^{R}\widehat\theta^{(r)},\\
-\widehat{\mathrm{Bias}}_{\%}&=100\frac{\overline{\widehat\theta}-\theta^0}{\theta^0}.
-\end{aligned}
+\begin{alignedat}{2}
+&\overline{\widehat\theta} &\quad &=\frac{1}{R}\sum_{r=1}^{R}\widehat\theta^{(r)},\\
+&\widehat{\mathrm{Bias}}_{\%} &\quad &=100\frac{\overline{\widehat\theta}-\theta^0}{\theta^0}.
+\end{alignedat}
 ```
 
 <br>
