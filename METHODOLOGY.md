@@ -2,7 +2,7 @@
 
 **Dynamic Discrete Choice Models under Behavioural Misspecification**
 
-This document describes the mathematical framework, structural estimation procedure and Monte Carlo design of the original research conducted at Heinrich Heine University Düsseldorf in 2025. The model is a finite-horizon adaptation of Rust (1987).
+This document describes the mathematical model, numerical solution and Monte Carlo estimation framework implemented in Python, based on my bachelor's thesis at Heinrich Heine University Düsseldorf (2025). The model is a finite-horizon adaptation of Rust (1987).
 
 [Return to repository overview](README.md)
 
@@ -10,65 +10,47 @@ This document describes the mathematical framework, structural estimation proced
 
 ## 1. Model specification
 
-### Decision environment
-
-An agent repeatedly chooses whether to maintain or replace a bus engine over a finite horizon of 60 months. The observable state is accumulated mileage since the most recent engine replacement. The decision and state spaces are
+An agent chooses each month whether to maintain or replace a bus engine over a finite horizon of 60 months. The observable state is accumulated mileage since the last replacement.
 
 ```math
-\begin{alignedat}{2}
-&t   &\quad &\in \{1,\ldots,T\}, \qquad T=60,\\
-&a_t &\quad &\in \mathcal A=\{0,1\},\\
-&x_t &\quad &\in \mathcal X=\{0,5000,\ldots,350000\}.
-\end{alignedat}
+\begin{aligned}
+t&\in\{1,\ldots,T\},\qquad T=60,\\
+a_t&\in\mathcal A=\{0,1\},\\
+x_t&\in\mathcal X=\{0,5000,\ldots,350000\}.
+\end{aligned}
 ```
 
 <br>
 
-Action $0$ denotes maintaining the engine; action $1$ denotes replacing it. The full state also includes alternative-specific utility shocks observed by the agent but not by the econometrician:
+Action $0$ denotes maintaining the engine; action $1$ denotes replacing it. The full state is $s_t=(x_t,\varepsilon_t)$, where $\varepsilon_t$ collects the two alternative-specific utility shocks. Utility consists of a deterministic component and an alternative-specific shock observed by the agent but not by the econometrician:
 
 ```math
-s_t=(x_t,\varepsilon_t).
-```
-
-### Instantaneous utility
-
-Utility is additively separable in a deterministic component and an unobserved shock:
-
-```math
-U(x_t,\varepsilon_t,a_t;\theta_u)=u(x_t,a_t;\theta_u)+\varepsilon_t(a_t).
+U(x_t,\varepsilon_t,a_t;\theta_u)=u(x_t,a_t;\theta_u)+\varepsilon_t(a_t),
 ```
 
 <br>
 
-The deterministic component is
+where
 
 ```math
 u(x_t,a_t;\theta_u)=
 \begin{cases}
--\theta_c x_t, & a_t=0,\\
--RC, & a_t=1.
+-\theta_c x_t,&a_t=0,\\
+-RC,&a_t=1.
 \end{cases}
 ```
 
 <br>
 
-The utility parameters are the replacement cost and the marginal maintenance cost:
+The structural utility parameters are $\theta_u=(RC,\theta_c)$: the replacement cost and the marginal maintenance cost. Replacing the engine resets mileage, eliminating maintenance costs in the current period and potentially reducing future maintenance costs.
 
-```math
-\theta_u=(RC,\theta_c), \qquad c(x_t;\theta_c)=\theta_c x_t.
-```
-
-<br>
-
-Replacing the engine resets mileage, so maintenance costs in the replacement period are zero. The agent trades off immediate replacement costs against future maintenance savings.
-
-The normalisation of maintenance costs at zero mileage and the restriction that replacement costs do not depend on mileage are part of the original utility specification. The utility shocks are independently and identically distributed Type I Extreme Value (Gumbel) shocks, with the usual scale normalisation.
+The shocks are independently and identically distributed Type I Extreme Value (Gumbel), with unit scale and location normalised to omit the additive Euler constant. This assumption yields the closed-form choice probabilities used below.
 
 <br>
 
 ## 2. Stochastic state dynamics
 
-The state follows a first-order Markov process: the conditional distribution of the next state depends only on the current state and action. Future utility shocks evolve independently of the observable state transitions:
+Mileage follows a first-order Markov process: the distribution of the next state depends only on the current state and action. Future utility shocks are independent of mileage transitions. The joint state transition therefore factorises as
 
 ```math
 f_s(x_{t+1},\varepsilon_{t+1}\mid x_t,\varepsilon_t,a_t)
@@ -77,23 +59,18 @@ f_s(x_{t+1},\varepsilon_{t+1}\mid x_t,\varepsilon_t,a_t)
 
 <br>
 
-Monthly mileage increments take one of three values:
+This conditional independence allows the continuation value to be expressed in terms of mileage alone after integrating out future utility shocks.
+
+Monthly mileage increments satisfy
 
 ```math
-\Delta x_t\in\{0,5000,10000\},\qquad \theta_f=(p_0,p_1,p_2),\qquad \sum_{j=0}^{2}p_j=1.
+\Delta x_t\in\{0,5000,10000\},\qquad
+\theta_f=(p_0,p_1,p_2),\qquad \sum_{j=0}^{2}p_j=1.
 ```
 
 <br>
 
-| Increment | Baseline probability |
-| --- | ---: |
-| 0 km | 0.3919 |
-| 5,000 km | 0.5953 |
-| 10,000 km | 0.0128 |
-
-<br>
-
-Away from the upper boundary of the state grid, the state transition is
+The uncapped state transition is
 
 ```math
 x_{t+1}=\begin{cases}
@@ -104,41 +81,47 @@ x_t+\Delta x_t,&a_t=0,\\
 
 <br>
 
-When the engine is maintained, mileage accumulates; when replaced, mileage is reset before the next increment is realised. The original thesis does not explicitly specify the treatment of transitions beyond the upper grid boundary in this expression.
+When the engine is maintained, mileage accumulates. When it is replaced, mileage resets before the next increment is realised.
 
-Writing the action-specific transition probabilities as matrices gives
+For dynamic programming, the transition matrices assign any mileage beyond 350,000 km to the highest grid state. Each action-specific matrix satisfies
 
 ```math
-P_a(x,x')=f_x(x'\mid x,a),\qquad \sum_{x'\in\mathcal X}P_a(x,x')=1.
+P_a(x,x')=\Pr(x_{t+1}=x'\mid x_t=x,a_t=a),\qquad
+\sum_{x'\in\mathcal X}P_a(x,x')=1.
 ```
 
 <br>
 
-## 3. Dynamic optimisation
+The simulation uses uncapped mileage increments; the corresponding boundary limitation is discussed in Section 9.
+
+<br>
+
+## 3. Dynamic optimisation and numerical solution
 
 ### Intertemporal objective
 
-The agent chooses a policy that maximises expected discounted utility over the remaining decision horizon:
+The agent chooses a policy $\delta$ to maximise expected discounted utility over the remaining horizon:
 
 ```math
-\max_{\delta}\;\mathbb E^{\delta}\left[\sum_{\tau=t}^{T}\beta^{\tau-t}U(x_\tau,\varepsilon_\tau,a_\tau)\mid x_t,\varepsilon_t\right],\qquad \beta\in[0,1].
+\max_{\delta}\;\mathbb E^{\delta}\left[
+\sum_{\tau=t}^{T}\beta^{\tau-t}U(x_\tau,\varepsilon_\tau,a_\tau)
+\mid x_t,\varepsilon_t\right],\qquad \beta\in[0,1].
 ```
 
 <br>
 
-The discount factor determines the weight attached to future utility relative to current utility.
-
-### Bellman equation
-
-The problem can be expressed recursively:
+The Bellman equation expresses the value of the optimal decision as current utility plus discounted expected continuation utility:
 
 ```math
-V_t(x,\varepsilon)=\max_{a\in\mathcal A}\left\{u(x,a)+\varepsilon(a)+\beta\mathbb E[V_{t+1}(x',\varepsilon')\mid x,a]\right\}.
+V_t(x,\varepsilon)=\max_{a\in\mathcal A}
+\left\{u(x,a)+\varepsilon(a)+\beta\mathbb E[V_{t+1}(x',\varepsilon')\mid x,a]\right\}.
 ```
 
 <br>
 
-Define the conditional value function, excluding the current utility shock, as
+### Integrating out the utility shocks
+
+Define the choice-specific value function, excluding the current shock, as
 
 ```math
 v_t(x,a)=u(x,a)+\beta\sum_{x'\in\mathcal X}P_a(x,x')\overline V_{t+1}(x').
@@ -146,23 +129,29 @@ v_t(x,a)=u(x,a)+\beta\sum_{x'\in\mathcal X}P_a(x,x')\overline V_{t+1}(x').
 
 <br>
 
-The ex-ante value function integrates over the utility shocks:
+The ex-ante value function integrates over the current shocks. Under the Gumbel assumption,
 
 ```math
-\overline V_t(x)=\mathbb E_\varepsilon\left[\max_{a\in\mathcal A}\{v_t(x,a)+\varepsilon(a)\}\right].
+\begin{aligned}
+\overline V_t(x)&=\mathbb E_\varepsilon\left[\max_a\{v_t(x,a)+\varepsilon(a)\}\right]\\
+&=\log\left(\sum_{a\in\mathcal A}\exp(v_t(x,a))\right).
+\end{aligned}
 ```
 
 <br>
 
-Under unit-scale Gumbel shocks, with the location normalised to omit the additive Euler constant, this expectation has the log-sum-exp representation used in the thesis:
+### Backward induction
+
+Unlike Rust's infinite-horizon model, the finite-horizon problem can be solved directly by backward induction. Set $\overline V_{T+1}(x)=0$ for every state. In the final decision period, the agent therefore compares only current utilities:
 
 ```math
-\overline V_t(x)=\log\left(\sum_{a\in\mathcal A}\exp(v_t(x,a))\right).
+v_T(x,a)=u(x,a),\qquad
+\overline V_T(x)=\log\left(\sum_a\exp(u(x,a))\right).
 ```
 
 <br>
 
-For numerical implementation, the conditional value recursion can equivalently be written in matrix form:
+Working backwards from period $T$ to period $1$, the solver evaluates both alternatives in every state and uses the resulting ex-ante values to calculate the continuation utility of the preceding period. In matrix notation, the choice-specific recursion is
 
 ```math
 \mathbf v_{t,a}=\mathbf u_a+\beta P_a\overline{\mathbf V}_{t+1}.
@@ -170,49 +159,13 @@ For numerical implementation, the conditional value recursion can equivalently b
 
 <br>
 
-This matrix expression is an equivalent reformulation of the original scalar equations.
+The transition matrix multiplies the vector of next-period values to obtain expected continuation utility for every current state simultaneously. The ex-ante value function is then updated using the log-sum-exp formula above.
 
-<br>
+The Python solver uses `np.logaddexp` to calculate this expression without directly exponentiating large values.
 
-## 4. Numerical solution by backward induction
+### Conditional choice probabilities
 
-Unlike the infinite-horizon model of Rust (1987), the finite-horizon specification can be solved by backward induction.
-
-**Terminal period:** No continuation utility remains after period $T$:
-
-```math
-v_T(x,a)=u(x,a),\qquad \overline V_T(x)=\log\left(\sum_a\exp(u(x,a))\right).
-```
-
-<br>
-
-**Backward recursion:** For each preceding period, compute the conditional and ex-ante value functions:
-
-```math
-\begin{aligned}
-v_t(x,a)&=u(x,a)+\beta\sum_{x'}P_a(x,x')\overline V_{t+1}(x'),\\
-\overline V_t(x)&=\log\left(\sum_a\exp(v_t(x,a))\right),
-\qquad t=T-1,\ldots,1.
-\end{aligned}
-```
-
-<br>
-
-The recursion yields value functions for every combination of state, action and period.
-
-<br>
-
-## 5. Conditional choice probabilities
-
-The agent selects the alternative offering the highest lifetime utility conditional on the current shocks:
-
-```math
-a_t^*=\arg\max_{a\in\mathcal A}\{v_t(x_t,a)+\varepsilon_t(a)\}.
-```
-
-<br>
-
-Integrating over the Gumbel shocks yields the logit choice probabilities:
+The agent chooses the alternative with the highest shock-inclusive value. Integrating over the shocks gives the logit probabilities:
 
 ```math
 \Pr_t(a\mid x)=\frac{\exp(v_t(x,a))}{\sum_{a'\in\mathcal A}\exp(v_t(x,a'))}.
@@ -220,96 +173,104 @@ Integrating over the Gumbel shocks yields the logit choice probabilities:
 
 <br>
 
-For the binary replacement decision, this simplifies to
+For the binary replacement decision,
 
 ```math
-\Pr_t(a=1\mid x)=\frac{1}{1+\exp(v_t(x,0)-v_t(x,1))}.
+\Pr_t(1\mid x)=\frac{1}{1+\exp(v_t(x,0)-v_t(x,1))}.
 ```
 
 <br>
 
-The replacement probability depends on the difference between the expected lifetime utilities of the two alternatives, not on their absolute levels. Incorrect assumptions about continuation utility can therefore distort the predicted choice probabilities.
+Choice probabilities depend on the difference between the two choice-specific values, rather than their absolute levels. Incorrect assumptions about continuation utility can therefore change predicted decisions.
 
-<br>
-
-## 6. Structural parameter estimation
-
-The econometrician observes states and actions but not the underlying structural parameters:
+For numerical stability, the implementation calculates both log choice probabilities directly:
 
 ```math
-\theta=(\theta_f,\theta_u),\qquad \theta_f=(p_0,p_1,p_2),\qquad \theta_u=(RC,\theta_c).
-```
-
-### Likelihood decomposition
-
-Conditional on initial states, the log-likelihood consists of a state-transition component and a conditional-choice component:
-
-```math
-\ell(\theta)=\ell_f(\theta_f)+\ell_a(\theta_u,\theta_f).
+\begin{aligned}
+\log\Pr_t(0\mid x)&=-\operatorname{logaddexp}(0,v_t(x,1)-v_t(x,0)),\\
+\log\Pr_t(1\mid x)&=-\operatorname{logaddexp}(0,v_t(x,0)-v_t(x,1)).
+\end{aligned}
 ```
 
 <br>
 
-With $T$ observed decision periods and $T-1$ observed transitions per bus, the components are
+Here, $\operatorname{logaddexp}(b,c)=\log(e^b+e^c)$ is evaluated using a numerically stable algorithm. This avoids overflow from direct exponentiation and taking the logarithm of probabilities that may have rounded to zero during numerical optimisation.
+
+<br>
+
+## 4. Two-stage maximum likelihood estimation
+
+The econometrician observes decisions and realised mileage but not the underlying parameters $\theta=(\theta_f,\theta_u)$. Conditional on the initial states, the full log-likelihood decomposes into a state-transition and a conditional-choice component:
 
 ```math
-\ell_f(\theta_f)=\sum_{i=1}^{N}\sum_{t=1}^{T-1}\log f_x(x_{i,t+1}\mid x_{it},a_{it};\theta_f),
+\begin{aligned}
+\ell(\theta)&=\ell_f(\theta_f)+\ell_a(\theta_u,\theta_f),\\
+\ell_f(\theta_f)&=\sum_{i=1}^{N}\sum_{t=1}^{T}\log f_x(x_{i,t+1}\mid x_{it},a_{it};\theta_f),\\
+\ell_a(\theta_u,\theta_f)&=\sum_{i=1}^{N}\sum_{t=1}^{T}\log\Pr_t(a_{it}\mid x_{it};\theta_u,\theta_f).
+\end{aligned}
 ```
 
 <br>
 
-```math
-\ell_a(\theta_u,\theta_f)=\sum_{i=1}^{N}\sum_{t=1}^{T}\log\Pr_t(a_{it}\mid x_{it};\theta_u,\theta_f).
-```
-
-<br>
-
-The original research uses a two-stage procedure, rather than jointly maximising the full likelihood.
+The simulation records mileage after the final decision, so there are $T$ recorded transitions per bus. A panel recording only states and actions through period $T$ would instead contain $T-1$ transitions. The likelihood decomposition describes the model; the implemented two-stage procedure uses only non-replacement observations in its transition estimation, rather than jointly maximising the full likelihood.
 
 ### Stage 1: Transition parameter estimation
 
-The first stage estimates objective transition probabilities using the relative frequencies of mileage changes in periods without engine replacement. This avoids treating the mileage reset as a natural state increment.
-
-Let $n_j$ denote the number of eligible observations of increment $j$. Then
+Only observations without engine replacement are used, so a mileage reset is not mistaken for a natural mileage increment. Let $n_j$ count eligible observations with increment $5000j$ km. The categorical maximum likelihood estimates for these increments are
 
 ```math
-\widehat p_j=\frac{n_j}{\sum_{k=0}^{2}n_k},\qquad \widehat\theta_f=(\widehat p_0,\widehat p_1,\widehat p_2).
+\widehat p_j=\frac{n_j}{\sum_{k=0}^{2}n_k},\qquad j\in\{0,1,2\}.
 ```
 
 <br>
 
-This is the categorical maximum likelihood estimator for the observed increments, when those increments are directly observed. The first stage does not require assumptions about the agent's discount factor, foresight or subjective beliefs.
+The implementation calculates the first two frequencies and obtains the third from $\widehat p_2=1-\widehat p_0-\widehat p_1$. This stage uses realised mileage changes, including eligible final-period observations, and does not require assumptions about the agent's foresight, discount factor or subjective beliefs. Since the increment is drawn independently of the current decision, conditioning on the keep action does not alter its objective distribution under the simulated data-generating process.
 
 ### Stage 2: Utility parameter estimation
 
-Holding the estimated transition parameters fixed, the econometrician maximises the choice log-likelihood:
+Holding the estimated transition probabilities fixed, the econometrician maximises the choice log-likelihood under the assumed behavioural model:
 
 ```math
-\widehat\theta_u=\arg\max_{\theta_u}\sum_{i=1}^{N}\sum_{t=1}^{T}\log\Pr_t(a_{it}\mid x_{it};\theta_u,\widehat\theta_f).
+\widehat\theta_u=\arg\max_{\theta_u}\sum_{i=1}^{N}\sum_{t=1}^{T}
+\log\Pr_t(a_{it}\mid x_{it};\theta_u,\widehat\theta_f).
 ```
 
 <br>
 
-Choice probabilities depend on the dynamic value functions. The dynamic problem must therefore be solved for each candidate utility parameter vector evaluated during optimisation.
+For each candidate utility parameter vector, the dynamic model is solved again to obtain the corresponding choice probabilities. This gives a finite-horizon analogue of Rust's nested fixed-point approach, with backward induction replacing the inner fixed-point computation.
 
-| Computational level | Responsibility |
-| --- | --- |
-| Inner recursion | Solve the dynamic decision problem by backward induction. |
-| Outer optimisation | Maximise the conditional-choice log-likelihood. |
+### Efficient likelihood evaluation
+
+Observations sharing the same action, state and period have identical likelihood contributions. Let $n_{a,x,t}$ count these observations. The equivalent choice log-likelihood is
+
+```math
+\ell_a(\theta_u,\widehat\theta_f)=\sum_{t=1}^{T}\sum_{x\in\mathcal X}\sum_{a\in\mathcal A}
+n_{a,x,t}\log\Pr_t(a\mid x;\theta_u,\widehat\theta_f).
+```
 
 <br>
 
-This is a finite-horizon analogue of Rust's nested fixed-point approach: backward induction replaces the infinite-horizon fixed-point computation.
+The counts are computed once before optimisation, avoiding repeated processing of the full simulated panel. With 71 mileage states, 60 periods and two actions, the likelihood can be evaluated using a fixed array of 8,520 cells rather than summing over all 60,000 individual decisions at every evaluation. The dynamic model must still be solved for each candidate parameter vector.
+
+### Numerical optimisation
+
+The maintenance cost coefficient is rescaled into cost per 5,000 km to improve numerical conditioning:
+
+```math
+\widetilde\theta_u=(RC,5000\theta_c).
+```
 
 <br>
 
-## 7. Behavioural misspecification
+The optimiser minimises the negative choice log-likelihood divided by the number of observations. This changes its scale but not its minimiser. The starting values are $RC=14$ and $\theta_c=0.0001$, and the bounds in the original units are $0\leq RC\leq 10000$ and $0\leq\theta_c\leq 1$. The implementation uses bounded L-BFGS-B with a bounded Nelder–Mead fallback, and checks convergence, finiteness and improvement over the starting objective within numerical tolerance.
 
-The research distinguishes the behavioural assumptions governing the data-generating process from those imposed during estimation. The econometrician maintains a discount factor of $0.8$, full foresight and correct beliefs about objective transitions in the main experiments. Each variant changes one behavioural dimension at a time.
+<br>
+
+## 5. Behavioural misspecification
+
+The data-generating process uses the agent's actual behavioural assumptions; estimation uses the econometrician's maintained assumptions. Across all three experiments, the econometrician assumes a discount factor of 0.8, full foresight and beliefs consistent with objective transitions. Each experiment changes one behavioural dimension at a time.
 
 ### Variant 1: Discount factor misspecification
-
-The agent's discount factor varies over the following grid, while the econometrician fixes it at $0.8$:
 
 ```math
 \beta^{\mathrm{agent}}\in\{0,0.2,0.4,0.6,0.8,1\},\qquad \beta^{\mathrm{model}}=0.8.
@@ -317,107 +278,75 @@ The agent's discount factor varies over the following grid, while the econometri
 
 <br>
 
-The conditional value functions differ because future utility receives different weights:
-
-```math
-v_t^{\mathrm{agent}}(x,a)=u(x,a)+\beta^{\mathrm{agent}}\sum_{x'}P_a(x,x')\overline V_{t+1}^{\mathrm{agent}}(x'),
-```
-
-<br>
-
-```math
-v_t^{\mathrm{model}}(x,a)=u(x,a)+\beta^{\mathrm{model}}\sum_{x'}P_a(x,x')\overline V_{t+1}^{\mathrm{model}}(x').
-```
-
-<br>
-
-When the econometrician overestimates the discount factor, the model predicts more replacement activity than the agent exhibits in the original discount-factor experiment. The estimator may compensate by increasing estimated replacement costs and decreasing estimated maintenance costs. The reverse pattern occurs when the agent is more forward-looking than assumed.
+Both the agent and the econometrician consider all remaining periods, but they assign different weights to continuation utility. If the agent discounts the future more heavily than assumed, future maintenance savings are less valuable. The econometrician may attribute the resulting differences in choices to higher replacement costs or lower maintenance costs.
 
 ### Variant 2: Limited foresight
 
-At each period $t$, a limited-foresight agent considers at most the next h periods. The effective planning horizon is
+At each decision, the agent considers the current period plus at most $h$ future periods. The effective terminal period is
 
 ```math
-H_t=\min\{t+h,T\}.
+H_t=\min\{t+h,T\},\qquad h\in\{0,2,4,6,8,25,40,60\}.
 ```
 
 <br>
 
-The agent's backward induction starts at this effective terminal period, with no continuation utility beyond it:
+The agent solves the dynamic problem with zero continuation utility beyond $H_t$. The terminal condition of the restricted problem is therefore $v_{H_t}(x,a)=u(x,a)$. This planning window moves forward as time advances: the agent does not commit to the policy computed in the first period, but evaluates the remaining alternatives using the same foresight restriction at each decision. At $h=0$ the agent is myopic; at $h=60$ the agent considers all remaining periods. The econometrician always assumes full foresight.
+
+Because utility and transition matrices do not depend on calendar time, the implementation solves a shorter model once for each horizon and reuses the relevant columns. Define
 
 ```math
-v_{H_t}(x,a)=u(x,a),\qquad \overline V_{H_t}(x)=\log\left(\sum_a\exp(u(x,a))\right).
+L=\min\{h+1,T\},\qquad L_t=\min\{L,T-t+1\}.
 ```
 
 <br>
 
-The investigated planning horizons are
-
-```math
-h\in\{0,2,4,6,8,25,40,60\}.
-```
-
-<br>
-
-A horizon of zero is myopic behaviour, while a horizon of $60$ implies full foresight over the remaining decision periods. The agent's effective terminal period is recalculated as time advances. The econometrician always assumes full foresight in this experiment.
+The appropriate zero-based column index in the shorter solution is $L-L_t$. This avoids solving a separate dynamic problem at every calendar period. The implementation tests agreement with the myopic decision rule and with the full-horizon solution when all remaining periods are considered.
 
 ### Variant 3: Subjective transition beliefs
 
-The agent's subjective mileage-increment probabilities are constructed as a convex combination of the true probabilities and an extreme belief:
+The agent forms subjective beliefs by taking a convex combination of the true transition probabilities and an extreme belief:
 
 ```math
-\theta_f^{\mathrm{agent}}(\alpha)=(1-\alpha)\theta_f^{\mathrm{true}}+\alpha\theta_f^{\mathrm{extreme}}.
+\theta_f^{\mathrm{agent}}(\alpha)=(1-\alpha)\theta_f^{\mathrm{true}}+\alpha\theta_f^{\mathrm{extreme}},
+\qquad \alpha\in\{0,0.2,0.4,0.6,0.8,1\}.
 ```
 
 <br>
 
+The extreme beliefs are
+
 ```math
-\alpha\in\{0,0.2,0.4,0.6,0.8,1\}.
+\theta_f^{\mathrm{optimistic}}=(1,0,0),\qquad
+\theta_f^{\mathrm{pessimistic}}=(0,0,1).
 ```
 
 <br>
 
-The two extreme beliefs are
+The optimistic agent increasingly expects zero additional mileage; the pessimistic agent increasingly expects 10,000 km per period. Subjective probabilities determine the agent's continuation values and choice probabilities, but realised mileage growth continues to follow the objective distribution.
+
+The distinction can be expressed directly in the continuation-value term. The agent uses subjective transition matrices, whereas the econometrician uses the matrices constructed from estimated objective probabilities:
 
 ```math
 \begin{aligned}
-\theta_f^{\mathrm{optimistic}}&=(1,0,0),\\
-\theta_f^{\mathrm{pessimistic}}&=(0,0,1).
+v_t^{\mathrm{agent}}(x,a)&=u(x,a)+\beta\sum_{x'}P_a^{\mathrm{agent}}(x,x')\overline V_{t+1}^{\mathrm{agent}}(x'),\\
+v_t^{\mathrm{model}}(x,a)&=u(x,a)+\beta\sum_{x'}\widehat P_a^{\mathrm{true}}(x,x')\overline V_{t+1}^{\mathrm{model}}(x').
 \end{aligned}
 ```
 
 <br>
 
-The optimistic agent increasingly expects no additional mileage; the pessimistic agent increasingly expects $10,000$ km of additional mileage each month.
-
-The agent uses subjective probabilities when computing continuation utility:
-
-```math
-v_t^{\mathrm{agent}}(x,a)=u(x,a)+\beta\sum_{x'}P_a^{\mathrm{agent}}(x,x')\overline V_{t+1}^{\mathrm{agent}}(x').
-```
+Consequently, even accurately estimated objective probabilities can lead to biased utility estimates when used as a substitute for subjective beliefs.
 
 <br>
 
-Actual mileage increments continue to follow the objective distribution. The econometrician estimates that distribution and uses it in the second-stage choice model:
-
-```math
-v_t^{\mathrm{model}}(x,a)=u(x,a)+\beta\sum_{x'}\widehat P_a^{\mathrm{true}}(x,x')\overline V_{t+1}^{\mathrm{model}}(x').
-```
-
-<br>
-
-Consequently, even accurately estimated objective probabilities can lead to biased utility estimates when used as a substitute for subjective beliefs. This distinction is central to the original thesis.
-
-<br>
-
-## 8. Monte Carlo experimental design
+## 6. Monte Carlo experimental design
 
 ### Baseline calibration
 
 | Parameter | Value | Interpretation |
 | --- | ---: | --- |
-| N | 1,000 | Identical simulated buses |
-| T | 60 | Monthly decision periods |
+| N | 1,000 | Simulated buses |
+| T | 60 | Decision periods |
 | R | 60 | Repetitions per specification |
 | Discount factor | 0.8 | Baseline time preference |
 | RC | 15.075 | Replacement cost |
@@ -429,135 +358,85 @@ Consequently, even accurately estimated objective probabilities can lead to bias
 
 <br>
 
-Each dataset contains $60,000$ decision observations. Across 60 repetitions, each specification generates $3.6$ million decision observations.
+### Simulation and estimation
 
-### Synthetic data generation
-
-All buses begin with zero accumulated mileage:
+All buses start with zero accumulated mileage. After solving the agent's decision problem, choices are simulated using uniform random draws:
 
 ```math
-x_{i1}=0\qquad\forall i.
+z_{it}\sim\mathcal U(0,1),\qquad a_{it}=\mathbf 1\{z_{it}\leq\Pr_t^{\mathrm{agent}}(1\mid x_{it})\}.
 ```
 
 <br>
 
-First, solve the agent's decision problem under the relevant behavioural specification. Then simulate decisions by comparing the corresponding replacement probability with a uniform random draw:
+Mileage increments are drawn independently from the objective distribution, and the state is updated according to the chosen action. Each simulated observation records the action, current mileage, resulting mileage, bus identifier and period.
 
-```math
-z_{it}\sim\mathcal U(0,1),\qquad a_{it}=\mathbf 1\{z_{it}<\Pr_t^{\mathrm{agent}}(1\mid x_{it})\}.
-```
-
-<br>
-
-Independently draw a mileage increment from the objective distribution and update the mileage state according to the chosen action. The use of objective probabilities for realised transitions is maintained even when agents hold subjective beliefs.
-
-### Estimation and repetition
-
-For each behavioural specification:
-
-1. Solve the agent's dynamic decision problem.
-2. Simulate a panel of decisions and states.
-3. Estimate objective transition probabilities.
-4. Estimate utility parameters under the econometrician's maintained assumptions.
-5. Record parameter estimates and replacement counts.
-6. Repeat for $R = 60$ simulated panels and aggregate the results.
+For each behavioural specification, the decision rule is solved once and reused across repetitions. Each repetition generates a new panel, estimates both sets of structural parameters and records the results. The estimates are then aggregated across repetitions.
 
 ```mermaid
 flowchart TD
-    A[True structural parameters] --> B[Agent behavioural assumptions]
-    B --> C[Backward induction]
-    C --> D[Choice probabilities]
-    D --> E[Simulate decisions and states]
-    E --> F[Stage 1: Transition estimation]
-    F --> G[Stage 2: Utility estimation]
-    H[Econometrician assumptions] --> G
-    G --> I[Compare estimates with true values]
-    I --> J[Aggregate Monte Carlo results]
+    A[True parameters and agent assumptions] --> B[Backward induction]
+    B --> C[Choice probabilities]
+    C --> D[Simulate decisions and states]
+    D --> E[Stage 1: Transition estimation]
+    E --> F[Stage 2: Utility estimation]
+    G[Econometrician assumptions] --> F
+    F --> H[Calculate bias and Monte Carlo uncertainty]
 ```
 
 <br>
 
-## 9. Statistical evaluation
+Each specification generates 60,000 decisions per repetition. Across 26 specification runs and 60 repetitions each, the experiments comprise 1,560 two-stage estimations and 93.6 million simulated decision observations. These totals count repeated baseline runs and do not imply independent or unique observations.
 
-For a generic parameter with true value theta-zero, calculate the Monte Carlo mean and its percentage deviation from the truth:
+The experiments use deterministic seeds: the repetition index plus 1,000 times the index of the varied parameter, with both indices starting at one. Variant 3 uses matching seeds across belief scenarios and checks that estimates agree at $\alpha=0$, where subjective and objective beliefs coincide.
+
+<br>
+
+## 7. Statistical evaluation
+
+For a parameter with true value $\theta^0$, the Monte Carlo mean and relative bias are
 
 ```math
-\overline{\widehat\theta}=\frac{1}{R}\sum_{r=1}^{R}\widehat\theta^{(r)},
+\begin{aligned}
+\overline{\widehat\theta}&=\frac{1}{R}\sum_{r=1}^{R}\widehat\theta^{(r)},\\
+\widehat{\mathrm{Bias}}_{\%}&=100\frac{\overline{\widehat\theta}-\theta^0}{\theta^0}.
+\end{aligned}
 ```
 
 <br>
+
+The sample standard deviation of the estimates across repetitions is
 
 ```math
-\widehat{\mathrm{Bias}}_{\%}=100\frac{\overline{\widehat\theta}-\theta^0}{\theta^0}.
+s_{\widehat\theta}=\sqrt{\frac{1}{R-1}\sum_{r=1}^{R}\left(\widehat\theta^{(r)}-\overline{\widehat\theta}\right)^2}.
 ```
 
 <br>
 
-The original analysis reports 95% confidence intervals to describe uncertainty across Monte Carlo repetitions. Relative bias should be interpreted carefully for small transition probabilities, where small absolute deviations can produce large percentage deviations.
-
-To investigate how misspecification changes behaviour, the original research also computes average replacements per bus over the entire decision horizon:
+For the positive true parameters in this experiment, the standard error of the estimated percentage bias is
 
 ```math
-\overline A=\frac{1}{RN}\sum_{r=1}^{R}\sum_{i=1}^{N}\sum_{t=1}^{T}a_{it}^{(r)}.
+\widehat{SE}_{\%}=\frac{100}{\theta^0}\frac{s_{\widehat\theta}}{\sqrt R}.
 ```
 
 <br>
 
-## 10. Robustness analysis
+The figures report approximate pointwise 95% Monte Carlo intervals:
 
-The limited-foresight experiment is repeated under four alternative calibrations, varying one component at a time:
-
-| Scenario | Alternative value |
-| --- | --- |
-| Higher maintenance costs | Maintenance coefficient = 0.001 |
-| Higher replacement costs | RC = 50 |
-| Alternative objective transition probabilities | (0.1, 0.3, 0.6) |
-| Greater future orientation | Agent and model discount factors = 0.99 |
+```math
+\widehat{\mathrm{Bias}}_{\%}\pm1.96\,\widehat{SE}_{\%}.
+```
 
 <br>
 
-The alternative transition distribution changes the objective data-generating process, not merely subjective beliefs. In the higher-discount-factor scenario both the agent and the econometrician use 0.99. Limited foresight remains the sole behavioural misspecification in these experiments.
-
-The analysis compares utility parameter bias and the stability of average replacement behaviour across planning horizons. These are the scenarios documented in Appendix A.1 of the original thesis.
+These intervals measure uncertainty in the Monte Carlo estimate of mean bias, not the sampling uncertainty of an individual parameter estimate. Relative bias can be large for small true transition probabilities even when absolute deviations are small.
 
 <br>
 
-## 11. Interpretation of the original findings
+## 8. Interpretation
 
-### Structural estimation under misspecification
+Maximum likelihood estimation finds the parameter values that best explain the observed choices within the assumed model. Under behavioural misspecification, these parameters need not coincide with the true structural parameters. A good fit therefore does not necessarily imply accurate parameter recovery.
 
-Maximum likelihood estimation chooses parameter values that best explain observed data within the assumed model. If the econometrician's behavioural assumptions imply incorrect choice probabilities at the true parameter values, the estimator may compensate by adjusting the utility parameters. A good fit therefore does not necessarily imply accurate structural parameter recovery.
-
-### Remarkable robustness to limited foresight
-
-In the original baseline experiment, utility parameter estimates are substantially distorted at short planning horizons, but from six future periods onwards the reported percentage biases are no longer statistically distinguishable from zero. The econometrician nevertheless continues to assume full foresight.
-
-| Foresight (future periods) | Average replacements per bus (original thesis) |
-| ---: | ---: |
-| 0 | 5.75 |
-| 2 | 11.77 |
-| 4 | 11.56 |
-| 6 | 11.47 |
-| 8 | 11.50 |
-| 25 | 11.50 |
-| 40 | 11.50 |
-| 60 | 11.50 |
-
-<br>
-
-Average replacement behaviour approximately stabilises at the same point at which detectable estimation bias disappears. The robustness experiments provide further evidence for this relationship.
-
-**Central insight:** Formally incorrect behavioural assumptions do not necessarily cause estimation bias when they remain compatible with actual decision-making behaviour. A fully forward-looking model can therefore perform well even if agents have limited, but sufficiently extensive, foresight.
-
-### Robustness of transition estimates
-
-The objective transition probabilities are comparatively robust across the original behavioural misspecification experiments because they are estimated from realised mileage increments. Utility estimates are more sensitive because the second-stage model incorporates behavioural assumptions.
-
-Under subjective transition beliefs, accurate first-stage estimates still fail to describe the probability distribution on which the agent bases decisions. The correct objective estimates can consequently become the source of misspecification in the second stage.
-
-### Additional mathematical interpretation
-
-The following equivalent reformulation clarifies the mechanism, but was not explicitly developed in the original thesis. In a binary logit model, choice probabilities depend on the conditional value difference:
+In the baseline limited-foresight experiment, the reported relative biases of both utility parameters fall below 1% in absolute value when agents consider six future periods. This demonstrates practical robustness rather than exact unbiasedness. The mechanism can be understood through the choice-specific value difference:
 
 ```math
 \Delta v_t(x)=v_t(x,1)-v_t(x,0).
@@ -565,44 +444,24 @@ The following equivalent reformulation clarifies the mechanism, but was not expl
 
 <br>
 
-If limited and full foresight produce approximately equal conditional value differences, they generate approximately equal conditional choice probabilities. Exact equality across all relevant states and periods would imply identical conditional choice probabilities. Similar aggregate replacement counts alone do not establish this equality.
+If limited and full foresight generate sufficiently similar value differences across relevant states and periods, they also generate similar conditional choice probabilities. Similar aggregate replacement frequencies alone do not establish this equivalence.
+
+This interpretation concerns the choice probabilities over the distribution of states observed in the experiment; it is not a claim that all underlying value functions coincide. The transition estimates are comparatively robust because first-stage estimation uses realised mileage increments rather than behavioural assumptions. This does not protect utility estimates when the econometrician incorrectly models the expectations driving observed decisions.
 
 <br>
 
-## 12. Implementation architecture
+## 9. Limitations and reproducibility
 
-| Module | Purpose |
-| --- | --- |
-| `config.py` | Parameter configuration |
-| `model.py` | Model specification |
-| `transitions.py` | Transition dynamics |
-| `solver.py` | Dynamic programming |
-| `limited_foresight.py` | Restricted planning horizons |
-| `simulation.py` | Synthetic panel generation |
-| `estimation.py`, `utility_estimation.py` | Structural parameter estimation |
-| `monte_carlo_variant1.py` | Discount factor experiment |
-| `monte_carlo_variant2.py` | Limited foresight experiment |
-| `monte_carlo_variant3.py` | Subjective beliefs experiment |
-| `monte_carlo_robustness.py` | Alternative calibrations |
-| `plot_results.py`, `plot_appendix.py` | Figures and tables |
+- The six-period result is specific to the baseline calibration, not a universal threshold for dynamic discrete choice models.
+- The discount factor is imposed rather than jointly estimated, reflecting identification difficulties. Agents are homogeneous and learning is not modelled.
+- The transition matrices cap mileage at 350,000 km, whereas simulated increments are uncapped. The simulation raises an error if a subsequent decision requires a state outside the grid; whether this affects saved runs has not been independently established.
+- Small or statistically undetectable Monte Carlo bias does not establish general unbiasedness or consistency under misspecification.
+
+The experiments save repetition-level parameter estimates, optimisation diagnostics, bias summaries and replacement-count statistics. See the [repository overview](README.md) for the code structure, dependencies and reproduction commands. Experiment settings are defined in [config.py](config.py).
 
 <br>
 
-The module descriptions follow the intended project structure and original variant numbering. Implementation details are defined by the Python source files.
-
-<br>
-
-## 13. Limitations and reproducibility
-
-- The six-period threshold is specific to the baseline calibration and is not a universal property of dynamic discrete choice models.
-- The discount factor is externally specified rather than jointly estimated with utility parameters, reflecting identification difficulties.
-- The simulation uses a representative agent with homogeneous behaviour and fixed subjective expectations; learning and behavioural heterogeneity are not modelled.
-- The first-stage estimation procedure relies on the simplified transition specification.
-- The absence of statistically detectable Monte Carlo bias is not a general proof of unbiasedness or consistency under misspecification.
-
-<br>
-
-## 14. References
+## References
 
 - Aguirregabiria, V., & Mira, P. (2010). Dynamic discrete choice structural models: A survey. *Journal of Econometrics*, 156(1), 38–67.
 - Bellman, R. (1957). *Dynamic Programming*. Princeton University Press.
