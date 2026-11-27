@@ -32,85 +32,55 @@ TRANSITION_PARAMETERS = (
 
 def load_summary(folder, x_column, expected_values):
     """Read a summary CSV and check that all scenarios are present."""
+
     path = (
         RESULTS_DIRECTORY
         / folder
         / f"summary_R{cfg.N_REPETITIONS}.csv"
     )
 
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"Missing results file:\n{path}\n"
-            "Run the corresponding Monte Carlo script first. "
-            "N_REPETITIONS in config.py must match the saved results."
-        )
-
     required_columns = [x_column]
 
     for parameter in PARAMETER_NAMES:
-        required_columns.extend(
-            [f"bias_{parameter}", f"se_{parameter}"]
-        )
+        required_columns.append(f"bias_{parameter}")
+        required_columns.append(f"se_{parameter}")
 
     with path.open("r", newline="", encoding="utf-8-sig") as file:
-        reader = csv.DictReader(file)
+        rows = list(csv.DictReader(file))
 
-        missing = set(required_columns) - set(reader.fieldnames or [])
+    data = {}
 
-        if missing:
-            raise ValueError(
-                f"{path.name} is missing columns: {sorted(missing)}"
-            )
+    for column in required_columns:
+        values = []
 
-        rows = list(reader)
+        for row in rows:
+            values.append(float(row[column]))
 
-    if not rows:
-        raise ValueError(f"The results file is empty: {path}")
+        data[column] = np.array(values, dtype=float)
 
-    try:
-        data = {
-            column: np.array(
-                [float(row[column]) for row in rows],
-                dtype=float,
-            )
-            for column in required_columns
-        }
-    except (ValueError, TypeError) as error:
-        raise ValueError(f"Invalid numerical values in {path}") from error
+        if not np.all(np.isfinite(data[column])):
+            raise ValueError(f"Non-finite values in {path}")
 
-    if any(not np.all(np.isfinite(values)) for values in data.values()):
-        raise ValueError(f"Non-finite values found in {path}")
-
-    for parameter in PARAMETER_NAMES:
-        if np.any(data[f"se_{parameter}"] < 0):
-            raise ValueError(f"Negative standard errors found in {path}")
-
-    # Sort numerically so lines connect scenarios in the correct order.
+    # Sort scenarios numerically.
     order = np.argsort(data[x_column])
-    data = {column: values[order] for column, values in data.items()}
+
+    for column in data:
+        data[column] = data[column][order]
 
     expected_values = np.asarray(expected_values, dtype=float)
 
-    if (
-        len(data[x_column]) != len(expected_values)
-        or not np.allclose(
-            data[x_column],
-            expected_values,
-            rtol=0,
-            atol=1e-12,
-        )
-    ):
-        raise ValueError(
-            f"Unexpected or incomplete scenario grid in {path}.\n"
-            f"Expected: {expected_values}\n"
-            f"Found: {data[x_column]}"
-        )
+    if len(data[x_column]) != len(expected_values):
+        raise ValueError(f"Incomplete scenario grid in {path}")
+
+    if not np.allclose(data[x_column], expected_values, rtol=0, atol=1e-12):
+        raise ValueError(f"Incorrect scenario values in {path}")
 
     return data
 
 
 def configure_style():
     """Use a consistent style that works across computers."""
+
     plt.rcParams.update(
         {
             "font.family": "DejaVu Serif",
@@ -130,6 +100,7 @@ def configure_style():
 
 
 def format_axis(ax, data, x_column, x_label, title):
+
     ax.set_title(title, pad=12)
     ax.set_xlabel(x_label)
     ax.set_ylabel("Relative bias (%)")
@@ -143,8 +114,6 @@ def format_axis(ax, data, x_column, x_label, title):
     )
 
     if x_column == "h":
-        # Preserve numerical spacing between horizons.
-        # All eight simulated horizons are still plotted.
         ax.set_xticks([0, 6, 20, 40, 60])
     else:
         ax.set_xticks(data[x_column])
@@ -154,6 +123,7 @@ def format_axis(ax, data, x_column, x_label, title):
 
 def draw_bias(ax, data, x_column, parameter, color, marker="o", label=None):
     """Draw the bias and its Monte Carlo uncertainty."""
+
     ax.errorbar(
         data[x_column],
         data[f"bias_{parameter}"],
@@ -171,6 +141,7 @@ def draw_bias(ax, data, x_column, parameter, color, marker="o", label=None):
 
 
 def save_figure(fig, filename, title):
+
     fig.suptitle(title, fontsize=18)
 
     fig.text(
@@ -207,6 +178,7 @@ def plot_utility(
     Variants 1 and 2: two panels side by side.
     Variant 3: two rows, one for each belief scenario.
     """
+
     n_rows = len(datasets)
 
     fig, axes = plt.subplots(
@@ -216,33 +188,23 @@ def plot_utility(
         squeeze=False,
     )
 
-    for row_index, (data, scenario_label) in enumerate(
-        zip(datasets, scenario_labels)
-    ):
-        for column_index, (parameter, parameter_title) in enumerate(
-            UTILITY_PARAMETERS
-        ):
-            ax = axes[row_index, column_index]
+    for i in range(n_rows):
+
+        data = datasets[i]
+        scenario_label = scenario_labels[i]
+
+        for j in range(len(UTILITY_PARAMETERS)):
+
+            parameter, parameter_title = UTILITY_PARAMETERS[j]
+            ax = axes[i, j]
 
             panel_title = parameter_title
+
             if scenario_label:
                 panel_title = f"{scenario_label}\n{parameter_title}"
 
-            draw_bias(
-                ax,
-                data,
-                x_column,
-                parameter,
-                color,
-            )
-
-            format_axis(
-                ax,
-                data,
-                x_column,
-                x_label,
-                panel_title,
-            )
+            draw_bias(ax, data, x_column, parameter, color)
+            format_axis(ax, data, x_column, x_label, panel_title)
 
     save_figure(fig, filename, title)
 
@@ -259,6 +221,7 @@ def plot_transitions(
     Plot all three transition parameters together.
     Variant 3 has two vertically stacked panels.
     """
+
     n_rows = len(datasets)
 
     fig, axes = plt.subplots(
@@ -268,17 +231,18 @@ def plot_transitions(
         squeeze=False,
     )
 
-    for row_index, (data, scenario_label) in enumerate(
-        zip(datasets, scenario_labels)
-    ):
-        ax = axes[row_index, 0]
+    for i in range(n_rows):
 
-        # Match the original R plots' default vertical range.
-        # Expand it if necessary to keep every error bar visible.
+        data = datasets[i]
+        scenario_label = scenario_labels[i]
+        ax = axes[i, 0]
+
+        # Default vertical range.
         lower_limit = -10.0
         upper_limit = 30.0
 
         for parameter, label, color, marker in TRANSITION_PARAMETERS:
+
             draw_bias(
                 ax,
                 data,
@@ -292,22 +256,11 @@ def plot_transitions(
             bias = data[f"bias_{parameter}"]
             error = 1.96 * data[f"se_{parameter}"]
 
-            lower_limit = min(
-                lower_limit,
-                float(np.min(bias - error)) - 1.0,
-            )
-            upper_limit = max(
-                upper_limit,
-                float(np.max(bias + error)) + 1.0,
-            )
+            # Expand the axis if necessary to display all error bars.
+            lower_limit = min(lower_limit, float(np.min(bias - error)) - 1.0)
+            upper_limit = max(upper_limit, float(np.max(bias + error)) + 1.0)
 
-        format_axis(
-            ax,
-            data,
-            x_column,
-            x_label,
-            scenario_label,
-        )
+        format_axis(ax, data, x_column, x_label, scenario_label)
 
         ax.set_ylim(lower_limit, upper_limit)
 
@@ -321,16 +274,18 @@ def plot_transitions(
 
 
 def main():
+
     unit_grid = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
     horizon_grid = (0, 2, 4, 6, 8, 25, 40, 60)
 
-    # Read and validate every input before producing figures.
+    # Load simulation results.
     variant1 = load_summary("variant1", "beta", unit_grid)
     variant2 = load_summary("variant2", "h", horizon_grid)
 
     variant3_pessimistic = load_summary(
         "variant3/001", "alpha", unit_grid
     )
+
     variant3_optimistic = load_summary(
         "variant3/100", "alpha", unit_grid
     )
@@ -338,43 +293,51 @@ def main():
     configure_style()
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
-    single_scenarios = (
-        (
-            1,
-            variant1,
-            "beta",
-            r"Agent discount factor $\beta^{\mathrm{agent}}$",
-            "#009ACD",
-        ),
-        (
-            2,
-            variant2,
-            "h",
-            r"Agent foresight $h$ (future periods)",
-            "#FFA500",
-        ),
+    # Variant 1: discount factor.
+    beta_label = r"Agent discount factor $\beta^{\mathrm{agent}}$"
+
+    plot_utility(
+        [variant1],
+        [""],
+        "beta",
+        beta_label,
+        "#009ACD",
+        "variant1_utility",
+        "Variant 1: utility parameter biases",
     )
 
-    for number, data, x_column, x_label, color in single_scenarios:
-        plot_utility(
-            datasets=[data],
-            scenario_labels=[""],
-            x_column=x_column,
-            x_label=x_label,
-            color=color,
-            filename=f"variant{number}_utility",
-            title=f"Variant {number}: utility parameter biases",
-        )
+    plot_transitions(
+        [variant1],
+        [""],
+        "beta",
+        beta_label,
+        "variant1_transitions",
+        "Variant 1: transition probability biases",
+    )
 
-        plot_transitions(
-            datasets=[data],
-            scenario_labels=[""],
-            x_column=x_column,
-            x_label=x_label,
-            filename=f"variant{number}_transitions",
-            title=f"Variant {number}: transition probability biases",
-        )
+    # Variant 2: foresight horizon.
+    horizon_label = r"Agent foresight $h$ (future periods)"
 
+    plot_utility(
+        [variant2],
+        [""],
+        "h",
+        horizon_label,
+        "#FFA500",
+        "variant2_utility",
+        "Variant 2: utility parameter biases",
+    )
+
+    plot_transitions(
+        [variant2],
+        [""],
+        "h",
+        horizon_label,
+        "variant2_transitions",
+        "Variant 2: transition probability biases",
+    )
+
+    # Variant 3: subjective transition probabilities.
     belief_datasets = [
         variant3_pessimistic,
         variant3_optimistic,

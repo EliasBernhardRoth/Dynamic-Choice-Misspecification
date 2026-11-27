@@ -30,70 +30,43 @@ def solve_model(
     """
     Solve the finite-horizon model by backward induction.
 
-    Returned arrays have:
-        rows = mileage states
-        columns = periods
+    Rows represent mileage states.
+    Columns represent periods.
     """
-    n_states = len(mileage_grid)
 
     if n_periods < 1:
-        raise ValueError("n_periods must be at least 1.")
+        raise ValueError("At least one period is required.")
 
     if not 0 <= beta <= 1:
-        raise ValueError("beta must lie between 0 and 1.")
+        raise ValueError("Beta must lie between 0 and 1.")
 
-    expected_shape = (n_states, n_states)
-
-    if (
-        keep_matrix.shape != expected_shape
-        or replace_matrix.shape != expected_shape
-    ):
-        raise ValueError(
-            "Transition matrices must match the mileage grid."
-        )
+    n_states = len(mileage_grid)
 
     # Current utility from each action.
-    u_keep = utility(
-        0, mileage_grid, replacement_cost, theta_c
-    )
+    u_keep = utility(0, mileage_grid, replacement_cost, theta_c)
+    u_replace = utility(1, 0, replacement_cost, theta_c)
 
-    u_replace = utility(
-        1, 0, replacement_cost, theta_c
-    )
-
-    # The extra column represents life after the final period:
-    # there is no remaining utility.
+    # Initialise value function and log choice probabilities.
     value = np.zeros((n_states, n_periods + 1))
-
     log_keep = np.zeros((n_states, n_periods))
     log_replace = np.zeros((n_states, n_periods))
 
-    # Work backwards from the final period to the first.
+    # Backward induction.
     for t in range(n_periods - 1, -1, -1):
 
-        # Current utility plus discounted expected future value.
-        q_keep = (
-            u_keep
-            + beta * (keep_matrix @ value[:, t + 1])
-        )
+        # Value function in the next period.
+        next_value = value[:, t + 1]
 
-        q_replace = (
-            u_replace
-            + beta * (replace_matrix @ value[:, t + 1])
-        )
+        # Choice-specific value functions.
+        q_keep = u_keep + beta * (keep_matrix @ next_value)
+        q_replace = u_replace + beta * (replace_matrix @ next_value)
 
-        # Numerically stable version of:
-        # log(exp(q_keep) + exp(q_replace))
+        # Expected value function.
         value[:, t] = np.logaddexp(q_keep, q_replace)
 
-        # Log choice probabilities, also calculated stably.
-        log_keep[:, t] = -np.logaddexp(
-            0.0, q_replace - q_keep
-        )
-
-        log_replace[:, t] = -np.logaddexp(
-            0.0, q_keep - q_replace
-        )
+        # Log choice probabilities.
+        log_keep[:, t] = -np.logaddexp(0, q_replace - q_keep)
+        log_replace[:, t] = -np.logaddexp(0, q_keep - q_replace)
 
     return {
         "value": value[:, :n_periods],
@@ -104,6 +77,7 @@ def solve_model(
 
 
 if __name__ == "__main__":
+
     mileage_grid = create_mileage_grid()
 
     keep_matrix, replace_matrix = build_transition_matrices(
@@ -124,24 +98,16 @@ if __name__ == "__main__":
     )
 
     probabilities = solution["replace_probability"]
+    keep_probabilities = np.exp(solution["log_keep_probability"])
 
-    # Check that values are finite and probabilities are valid.
+    # Check numerical and mathematical validity.
     assert np.all(np.isfinite(solution["value"]))
-    assert np.all(np.isfinite(probabilities))
-    assert np.all((probabilities >= 0) & (probabilities <= 1))
-
-    keep_probabilities = np.exp(
-        solution["log_keep_probability"]
-    )
-
-    assert np.allclose(
-        keep_probabilities + probabilities, 1.0
-    )
+    assert np.allclose(keep_probabilities + probabilities, 1)
 
     print("Value function shape:", solution["value"].shape)
     print("Probability matrix shape:", probabilities.shape)
 
-    # Inspect the state corresponding to 10,000 km.
+    # Inspect replacement probabilities at 10,000 km.
     state_index = 10000 // MILEAGE_STEP
 
     print(

@@ -15,9 +15,6 @@ from estimation import estimate_transition_probabilities
 def prepare_choice_counts(data, mileage_grid):
     """
     Count observations by action, mileage state and period.
-
-    This avoids repeatedly processing every individual observation
-    during optimisation.
     """
     data = np.asarray(data, dtype=float)
 
@@ -35,33 +32,30 @@ def prepare_choice_counts(data, mileage_grid):
     if np.any(periods < 1) or np.any(periods != np.floor(periods)):
         raise ValueError("Periods must be positive integers.")
 
-    # Locate each observed mileage in the model's grid.
-    state_indices = np.searchsorted(mileage_grid, data[:, 1])
+    # Find the grid index of each observed mileage.
+    states = np.searchsorted(mileage_grid, data[:, 1])
 
-    if np.any(state_indices >= len(mileage_grid)):
+    if np.any(states >= len(mileage_grid)):
         raise ValueError("Observed mileage exceeds the model's grid.")
 
-    if not np.array_equal(
-        mileage_grid[state_indices], data[:, 1]
-    ):
+    if np.any(mileage_grid[states] != data[:, 1]):
         raise ValueError("Observed mileage must lie on the model's grid.")
 
     actions = data[:, 0].astype(int)
-    time_indices = periods.astype(int) - 1
+    times = periods.astype(int) - 1
 
     n_states = len(mileage_grid)
     n_periods = int(periods.max())
 
-    counts = np.zeros(
-        (2, n_states, n_periods),
-        dtype=np.int64,
-    )
+    counts = np.zeros((2, n_states, n_periods), dtype=np.int64)
 
-    np.add.at(
-        counts,
-        (actions, state_indices, time_indices),
-        1,
-    )
+    # Count how often each combination occurs.
+    for i in range(len(data)):
+        action = actions[i]
+        state = states[i]
+        time = times[i]
+
+        counts[action, state, time] += 1
 
     return counts
 
@@ -76,17 +70,13 @@ def negative_log_likelihood(
 ):
     """
     Calculate the negative choice log-likelihood.
-
-    parameters[0] = replacement cost
-    parameters[1] = maintenance-cost coefficient
     """
     replacement_cost, theta_c = parameters
 
-    if (
-        not np.all(np.isfinite(parameters))
-        or replacement_cost < 0
-        or theta_c < 0
-    ):
+    if not np.all(np.isfinite(parameters)):
+        return np.inf
+
+    if replacement_cost < 0 or theta_c < 0:
         return np.inf
 
     n_periods = choice_counts.shape[2]
@@ -101,9 +91,13 @@ def negative_log_likelihood(
         n_periods=n_periods,
     )
 
+    # Weight log probabilities by observed choice frequencies.
+    log_keep = solution["log_keep_probability"]
+    log_replace = solution["log_replace_probability"]
+
     log_likelihood = np.sum(
-        choice_counts[0] * solution["log_keep_probability"]
-        + choice_counts[1] * solution["log_replace_probability"]
+        choice_counts[0] * log_keep
+        + choice_counts[1] * log_replace
     )
 
     return -float(log_likelihood)
@@ -115,10 +109,8 @@ def estimate_utility_parameters(
     beta=cfg.BETA_MODEL,
 ):
     """
-    Estimate replacement and maintenance-cost parameters.
-
-    Transition probabilities are held fixed at their stage-one
-    estimates. The discount factor is the researcher's assumption.
+    Estimate utility parameters conditional on the estimated
+    transition probabilities and assumed discount factor.
     """
     mileage_grid = create_mileage_grid()
     choice_counts = prepare_choice_counts(data, mileage_grid)
@@ -128,25 +120,24 @@ def estimate_utility_parameters(
     if p_hat.shape != (3,):
         raise ValueError("Exactly three transition probabilities are required.")
 
+    p_zero, p_one, p_two = p_hat
+
     keep_matrix, replace_matrix = build_transition_matrices(
         len(mileage_grid),
-        p_hat[0],
-        p_hat[1],
-        p_hat[2],
+        p_zero,
+        p_one,
+        p_two,
     )
 
     n_observations = int(choice_counts.sum())
 
-    # Same starting values and bounds as the MATLAB code.
     initial_parameters = np.array([14.0, 0.0001])
 
-    # Optimise the maintenance coefficient in cost-per-mileage-step
-    # units. This improves numerical scaling.
+    # Rescale parameters to improve numerical optimisation.
     scale = np.array([1.0, float(cfg.MILEAGE_STEP)])
-
     initial_scaled = initial_parameters * scale
 
-    scaled_bounds = [
+    bounds = [
         (0.0, 10000.0),
         (0.0, float(cfg.MILEAGE_STEP)),
     ]
@@ -163,18 +154,18 @@ def estimate_utility_parameters(
             beta,
         )
 
-        # Averaging changes the scale, but not the minimiser.
         return nll / n_observations
 
     initial_nll = objective(initial_scaled) * n_observations
 
+    # First attempt: L-BFGS-B.
     method = "L-BFGS-B"
 
     result = minimize(
         objective,
         initial_scaled,
         method=method,
-        bounds=scaled_bounds,
+        bounds=bounds,
         options={
             "ftol": 1e-15,
             "gtol": 1e-9,
@@ -185,7 +176,7 @@ def estimate_utility_parameters(
 
     total_evaluations = result.nfev
 
-    # Retry with a different method if the first solver fails.
+    # Use Nelder-Mead if L-BFGS-B fails.
     if not result.success or not np.isfinite(result.fun):
         method = "Nelder-Mead"
 
@@ -193,7 +184,7 @@ def estimate_utility_parameters(
             objective,
             initial_scaled,
             method=method,
-            bounds=scaled_bounds,
+            bounds=bounds,
             options={
                 "xatol": 1e-9,
                 "fatol": 1e-15,
@@ -210,6 +201,10 @@ def estimate_utility_parameters(
         )
 
     estimated_parameters = result.x / scale
+
+    replacement_cost = estimated_parameters[0]
+    maintenance_cost = estimated_parameters[1]
+
     final_nll = float(result.fun * n_observations)
 
     if final_nll > initial_nll + 1e-6:
@@ -218,8 +213,8 @@ def estimate_utility_parameters(
         )
 
     return {
-        "replacement_cost": float(estimated_parameters[0]),
-        "maintenance_cost": float(estimated_parameters[1]),
+        "replacement_cost": float(replacement_cost),
+        "maintenance_cost": float(maintenance_cost),
         "negative_log_likelihood": final_nll,
         "initial_negative_log_likelihood": float(initial_nll),
         "converged": bool(result.success),
@@ -230,7 +225,8 @@ def estimate_utility_parameters(
 
 
 if __name__ == "__main__":
-    # Generate one baseline dataset.
+
+    # Generate a baseline dataset.
     mileage_grid = create_mileage_grid()
 
     keep_matrix, replace_matrix = build_transition_matrices(

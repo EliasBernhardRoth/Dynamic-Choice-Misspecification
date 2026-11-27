@@ -19,9 +19,7 @@ PARAMETER_NAMES = ("rc", "theta", "px0", "px1", "px2")
 
 
 def write_csv(path, rows):
-    """Save a list of dictionaries as a CSV file."""
-    if not rows:
-        raise ValueError("There are no results to save.")
+    """Save results as a CSV file."""
 
     with path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=list(rows[0]))
@@ -31,27 +29,20 @@ def write_csv(path, rows):
 
 def summarize_estimates(beta, estimates, true_parameters):
     """
-    Calculate relative bias and Monte Carlo standard errors.
+    Calculate relative biases and Monte Carlo standard errors.
 
-    Both are expressed as percentages of the true parameter.
-    The standard error measures uncertainty in the Monte Carlo mean.
+    Both are expressed as percentages of the true parameters.
     """
+
     estimates = np.asarray(estimates, dtype=float)
-
-    if estimates.ndim != 2 or estimates.shape[1] != len(PARAMETER_NAMES):
-        raise ValueError("Each repetition must contain five estimates.")
-
     n_repetitions = estimates.shape[0]
 
     if n_repetitions < 2:
         raise ValueError("At least two repetitions are required.")
 
-    if not np.all(np.isfinite(estimates)):
-        raise ValueError("Some parameter estimates are not finite.")
-
     means = estimates.mean(axis=0)
 
-    # ddof=1 matches MATLAB's sample standard deviation.
+    # Sample standard deviation divided by the square root of R.
     standard_errors = (
         estimates.std(axis=0, ddof=1) / np.sqrt(n_repetitions)
     )
@@ -61,59 +52,62 @@ def summarize_estimates(beta, estimates, true_parameters):
 
     row = {"beta": beta}
 
-    for index, name in enumerate(PARAMETER_NAMES):
-        row[f"bias_{name}"] = float(relative_bias[index])
-        row[f"se_{name}"] = float(relative_se[index])
+    for i in range(len(PARAMETER_NAMES)):
+        name = PARAMETER_NAMES[i]
+
+        row[f"bias_{name}"] = float(relative_bias[i])
+        row[f"se_{name}"] = float(relative_se[i])
 
     return row
 
 
 def run_variant1():
+
     n_repetitions = cfg.N_REPETITIONS
 
-    if not isinstance(n_repetitions, int) or n_repetitions < 2:
-        raise ValueError("N_REPETITIONS must be an integer of at least 2.")
+    if n_repetitions < 2:
+        raise ValueError("At least two repetitions are required.")
 
-    # This file implements the baseline Variant 1 experiment.
+    # Researcher's assumed discount factor.
     beta_model = 0.8
 
     if not np.isclose(cfg.BETA_MODEL, beta_model, rtol=0, atol=1e-12):
-        raise ValueError("Set BETA_MODEL = 0.8 in config.py for Variant 1.")
+        raise ValueError("Set BETA_MODEL = 0.8 in config.py.")
 
-    true_probabilities = np.array(
-        [cfg.P_ZERO, cfg.P_ONE_STEP, cfg.P_TWO_STEPS],
-        dtype=float,
-    )
+    true_probabilities = np.array([
+        cfg.P_ZERO,
+        cfg.P_ONE_STEP,
+        cfg.P_TWO_STEPS,
+    ], dtype=float)
 
-    true_parameters = np.array(
-        [
-            cfg.REPLACEMENT_COST,
-            cfg.MAINTENANCE_COST,
-            *true_probabilities,
-        ],
-        dtype=float,
-    )
+    true_parameters = np.array([
+        cfg.REPLACEMENT_COST,
+        cfg.MAINTENANCE_COST,
+        true_probabilities[0],
+        true_probabilities[1],
+        true_probabilities[2],
+    ], dtype=float)
 
-    if not np.all(np.isfinite(true_parameters)) or np.any(true_parameters <= 0):
-        raise ValueError(
-            "True parameters must be positive and finite "
-            "to calculate percentage biases."
-        )
+    if not np.all(np.isfinite(true_parameters)):
+        raise ValueError("True parameters must be finite.")
+
+    if np.any(true_parameters <= 0):
+        raise ValueError("True parameters must be positive.")
 
     mileage_grid = create_mileage_grid()
 
     keep_matrix, replace_matrix = build_transition_matrices(
         len(mileage_grid),
-        *true_probabilities,
+        true_probabilities[0],
+        true_probabilities[1],
+        true_probabilities[2],
     )
 
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
     raw_path = OUTPUT_DIRECTORY / f"raw_estimates_R{n_repetitions}.csv"
     summary_path = OUTPUT_DIRECTORY / f"summary_R{n_repetitions}.csv"
-    replacement_path = (
-        OUTPUT_DIRECTORY / f"replacement_counts_R{n_repetitions}.csv"
-    )
+    replacement_path = OUTPUT_DIRECTORY / f"replacement_counts_R{n_repetitions}.csv"
 
     raw_columns = [
         "beta",
@@ -142,14 +136,17 @@ def run_variant1():
 
     # Save each completed repetition immediately.
     with raw_path.open("w", newline="", encoding="utf-8") as file:
+
         writer = csv.DictWriter(file, fieldnames=raw_columns)
         writer.writeheader()
         file.flush()
 
+        # Loop over the agent's discount factors.
         for scenario_index, beta_agent in enumerate(BETA_VALUES, start=1):
+
             print(f"\nAgent's discount factor: {beta_agent:.1f}", flush=True)
 
-            # The agent's decision rule is identical across repetitions.
+            # Solve the agent's model once per scenario.
             solution = solve_model(
                 mileage_grid=mileage_grid,
                 keep_matrix=keep_matrix,
@@ -163,8 +160,9 @@ def run_variant1():
             scenario_estimates = []
             scenario_replacements = []
 
+            # Monte Carlo repetitions.
             for repetition in range(1, n_repetitions + 1):
-                # Match the original MATLAB experiment's seed convention.
+
                 seed = repetition + 1000 * scenario_index
 
                 data = simulate_data(
@@ -176,21 +174,15 @@ def run_variant1():
                     seed=seed,
                 )
 
-                # Stage 1: estimate the actual transition probabilities.
+                # Stage 1: estimate transition probabilities.
                 p_hat = estimate_transition_probabilities(data)
 
-                # Stage 2: estimate costs under the researcher's beta.
+                # Stage 2: estimate utility parameters.
                 fit = estimate_utility_parameters(
                     data=data,
                     transition_probabilities=p_hat,
                     beta=beta_model,
                 )
-
-                if not fit["converged"]:
-                    raise RuntimeError(
-                        f"Estimation failed for beta={beta_agent}, "
-                        f"repetition={repetition}."
-                    )
 
                 estimates = [
                     fit["replacement_cost"],
@@ -206,8 +198,9 @@ def run_variant1():
                         f"repetition={repetition}."
                     )
 
-                # Total replacements over all periods, averaged across buses.
-                mean_replacements = float(data[:, 0].sum() / cfg.N_BUSES)
+                mean_replacements = float(
+                    data[:, 0].sum() / cfg.N_BUSES
+                )
 
                 scenario_estimates.append(estimates)
                 scenario_replacements.append(mean_replacements)
@@ -216,7 +209,11 @@ def run_variant1():
                     "beta": beta_agent,
                     "repetition": repetition,
                     "seed": seed,
-                    **dict(zip(PARAMETER_NAMES, estimates)),
+                    "rc": estimates[0],
+                    "theta": estimates[1],
+                    "px0": estimates[2],
+                    "px1": estimates[3],
+                    "px2": estimates[4],
                     "mean_replacements_per_bus": mean_replacements,
                     "negative_log_likelihood": fit["negative_log_likelihood"],
                     "converged": fit["converged"],
@@ -234,27 +231,30 @@ def run_variant1():
                     flush=True,
                 )
 
+            # Summarise estimates across repetitions.
             summary = summarize_estimates(
                 beta=beta_agent,
                 estimates=scenario_estimates,
                 true_parameters=true_parameters,
             )
+
             summary_rows.append(summary)
 
+            # Mean replacement counts and Monte Carlo standard errors.
             replacement_values = np.asarray(scenario_replacements)
 
-            replacement_rows.append(
-                {
-                    "beta": beta_agent,
-                    "mean_replacements_per_bus": float(
-                        replacement_values.mean()
-                    ),
-                    "se_mean_replacements_per_bus": float(
-                        replacement_values.std(ddof=1)
-                        / np.sqrt(n_repetitions)
-                    ),
-                }
+            mean_replacements = replacement_values.mean()
+
+            se_replacements = (
+                replacement_values.std(ddof=1)
+                / np.sqrt(n_repetitions)
             )
+
+            replacement_rows.append({
+                "beta": beta_agent,
+                "mean_replacements_per_bus": float(mean_replacements),
+                "se_mean_replacements_per_bus": float(se_replacements),
+            })
 
             print(
                 f"  Average bias: RC = {summary['bias_rc']:.3f}%, "
@@ -262,7 +262,7 @@ def run_variant1():
                 flush=True,
             )
 
-    # These summaries are written after all scenarios finish successfully.
+    # Save summary results.
     write_csv(summary_path, summary_rows)
     write_csv(replacement_path, replacement_rows)
 

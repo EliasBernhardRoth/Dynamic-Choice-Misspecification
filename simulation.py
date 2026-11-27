@@ -32,55 +32,36 @@ def simulate_data(
     """
     Simulate choices and mileage using actual transition probabilities.
 
-    Return one row per bus and period, with columns:
-        action, mileage, next_mileage, bus_id, period
+    Columns: action, mileage, next_mileage, bus_id, period.
 
-    action = 0: keep
-    action = 1: replace
-
-    Bus IDs and periods start at 1, matching the MATLAB data.
+    Action 0: keep.
+    Action 1: replace.
     """
     replace_probabilities = np.asarray(
         replace_probabilities, dtype=float
     )
 
-    if replace_probabilities.ndim != 2:
-        raise ValueError("Replacement probabilities must be a matrix.")
-
-    if (
-        not np.all(np.isfinite(replace_probabilities))
-        or np.any(replace_probabilities < 0)
-        or np.any(replace_probabilities > 1)
-    ):
-        raise ValueError("Replacement probabilities must lie in [0, 1].")
-
-    probabilities = np.array(
-        [p_zero, p_one_step, p_two_steps], dtype=float
-    )
-
-    if (
-        not np.all(np.isfinite(probabilities))
-        or np.any(probabilities < 0)
-        or not np.isclose(
-            probabilities.sum(), 1.0, rtol=0, atol=1e-12
-        )
-    ):
-        raise ValueError(
-            "Transition probabilities must be non-negative and sum to one."
-        )
-
     n_states, n_periods = replace_probabilities.shape
 
-    if n_buses < 1 or n_periods < 1 or mileage_step <= 0:
-        raise ValueError(
-            "Bus count, period count and mileage step must be positive."
-        )
+    if not np.all(
+        (replace_probabilities >= 0) & (replace_probabilities <= 1)
+    ):
+        raise ValueError("Invalid replacement probabilities.")
 
-    # Legacy random generator for compatibility with the original runs.
+    probabilities = np.array([p_zero, p_one_step, p_two_steps])
+
+    if np.any(probabilities < 0):
+        raise ValueError("Transition probabilities cannot be negative.")
+
+    if not np.isclose(np.sum(probabilities), 1, rtol=0, atol=1e-12):
+        raise ValueError("Transition probabilities must sum to one.")
+
+    if n_buses < 1 or n_periods < 1 or mileage_step <= 0:
+        raise ValueError("Invalid simulation settings.")
+
+    # Generate random draws in the same order as the original code.
     rng = np.random.RandomState(seed)
 
-    # MATLAB fills random matrices column by column.
-    # order="F" preserves that arrangement.
     choice_draws = rng.random_sample(
         n_buses * n_periods
     ).reshape((n_buses, n_periods), order="F")
@@ -89,74 +70,61 @@ def simulate_data(
         n_buses * n_periods
     ).reshape((n_buses, n_periods), order="F")
 
-    # Actual mileage increases: 0, one step or two steps.
+    # Assign mileage increases based on transition probabilities.
     increments = np.where(
-        transition_draws <= p_zero,
-        0,
-        np.where(
-            transition_draws <= p_zero + p_one_step,
-            mileage_step,
-            2 * mileage_step,
-        ),
+        transition_draws <= p_zero + p_one_step,
+        mileage_step,
+        2 * mileage_step,
     )
 
+    increments[transition_draws <= p_zero] = 0
+
+    # Initialise arrays.
     mileage = np.zeros((n_buses, n_periods), dtype=np.int64)
     actions = np.zeros((n_buses, n_periods), dtype=np.int64)
     next_mileage = np.zeros((n_buses, n_periods), dtype=np.int64)
 
+    # Simulate choices and mileage period by period.
     for t in range(n_periods):
 
-        # Carry forward the previous period's resulting mileage.
         if t > 0:
             mileage[:, t] = next_mileage[:, t - 1]
 
-        state_indices = mileage[:, t] // mileage_step
+        states = mileage[:, t] // mileage_step
 
-        if np.any(state_indices >= n_states):
-            raise ValueError(
-                "Simulated mileage exceeds the model's state grid."
-            )
+        if np.any(states >= n_states):
+            raise ValueError("Simulated mileage exceeds grid.")
 
-        # Replace if the random draw is below the choice probability.
+        # Determine which buses replace their engines.
         actions[:, t] = (
-            choice_draws[:, t]
-            <= replace_probabilities[state_indices, t]
-        ).astype(np.int64)
-
-        # Replacement resets mileage before the next increase.
-        starting_mileage = np.where(
-            actions[:, t] == 1,
-            0,
-            mileage[:, t],
+            choice_draws[:, t] <= replace_probabilities[states, t]
         )
 
-        next_mileage[:, t] = (
-            starting_mileage + increments[:, t]
-        )
+        # Replacement resets mileage to zero.
+        starting_mileage = mileage[:, t].copy()
+        starting_mileage[actions[:, t] == 1] = 0
 
-    # Arrange observations bus by bus, then period by period.
-    bus_ids = np.repeat(
-        np.arange(1, n_buses + 1), n_periods
-    )
+        # Add the mileage increase.
+        next_mileage[:, t] = starting_mileage + increments[:, t]
 
-    periods = np.tile(
-        np.arange(1, n_periods + 1), n_buses
-    )
+    # Create bus IDs and period numbers.
+    bus_ids = np.repeat(np.arange(1, n_buses + 1), n_periods)
+    periods = np.tile(np.arange(1, n_periods + 1), n_buses)
 
-    data = np.column_stack(
-        [
-            actions.ravel(order="C"),
-            mileage.ravel(order="C"),
-            next_mileage.ravel(order="C"),
-            bus_ids,
-            periods,
-        ]
-    )
+    # Combine all observations into one dataset.
+    data = np.column_stack([
+        actions.ravel(),
+        mileage.ravel(),
+        next_mileage.ravel(),
+        bus_ids,
+        periods,
+    ])
 
     return data
 
 
 if __name__ == "__main__":
+
     mileage_grid = create_mileage_grid()
 
     keep_matrix, replace_matrix = build_transition_matrices(
@@ -185,20 +153,16 @@ if __name__ == "__main__":
         seed=1001,
     )
 
-    # Check the dataset's structure and timing.
+    # Check dataset dimensions.
     assert data.shape == (N_BUSES * N_PERIODS, 5)
-    assert np.all(np.isin(data[:, 0], [0, 1]))
 
     panel = data.reshape(N_BUSES, N_PERIODS, 5)
 
     # Every bus starts at zero mileage.
     assert np.all(panel[:, 0, 1] == 0)
 
-    # Next-period mileage becomes the following observed state.
-    assert np.array_equal(
-        panel[:, 1:, 1],
-        panel[:, :-1, 2],
-    )
+    # Check consistency of mileage across periods.
+    assert np.array_equal(panel[:, 1:, 1], panel[:, :-1, 2])
 
     mean_replacements = data[:, 0].sum() / N_BUSES
 

@@ -13,18 +13,18 @@ def utility(action, mileage, replacement_cost, theta_c):
     action = 0: keep the engine
     action = 1: replace the engine
     """
+
     if action == 0:
         return -maintenance_cost(mileage, theta_c)
 
-    elif action == 1:
-        return -(replacement_cost + maintenance_cost(0, theta_c))
+    if action == 1:
+        return -replacement_cost
 
-    else:
-        raise ValueError("action must be 0 (keep) or 1 (replace)")
+    raise ValueError("Action must be 0 or 1.")
 
 
-# These checks run only when you run this file directly.
 if __name__ == "__main__":
+
     mileage = 10000
 
     cost = maintenance_cost(mileage, MAINTENANCE_COST)

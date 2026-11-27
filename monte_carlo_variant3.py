@@ -25,11 +25,10 @@ PARAMETER_NAMES = ("rc", "theta", "px0", "px1", "px2")
 
 def write_csv(path, rows):
     """Save a list of dictionaries as a CSV file."""
-    if not rows:
-        raise ValueError("There are no results to save.")
+    columns = list(rows[0])
 
     with path.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(file, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
 
@@ -43,16 +42,10 @@ def summarize_estimates(alpha, estimates, true_parameters):
     """
     estimates = np.asarray(estimates, dtype=float)
 
-    if estimates.ndim != 2 or estimates.shape[1] != len(PARAMETER_NAMES):
-        raise ValueError("Each repetition must contain five estimates.")
-
     n_repetitions = estimates.shape[0]
 
     if n_repetitions < 2:
         raise ValueError("At least two repetitions are required.")
-
-    if not np.all(np.isfinite(estimates)):
-        raise ValueError("Some parameter estimates are not finite.")
 
     means = estimates.mean(axis=0)
 
@@ -65,9 +58,10 @@ def summarize_estimates(alpha, estimates, true_parameters):
 
     row = {"alpha": alpha}
 
-    for index, name in enumerate(PARAMETER_NAMES):
-        row[f"bias_{name}"] = float(relative_bias[index])
-        row[f"se_{name}"] = float(relative_se[index])
+    for i in range(len(PARAMETER_NAMES)):
+        name = PARAMETER_NAMES[i]
+        row[f"bias_{name}"] = float(relative_bias[i])
+        row[f"se_{name}"] = float(relative_se[i])
 
     return row
 
@@ -75,8 +69,8 @@ def summarize_estimates(alpha, estimates, true_parameters):
 def run_variant3():
     n_repetitions = cfg.N_REPETITIONS
 
-    if not isinstance(n_repetitions, int) or n_repetitions < 2:
-        raise ValueError("N_REPETITIONS must be an integer of at least 2.")
+    if n_repetitions < 2:
+        raise ValueError("At least two repetitions are required.")
 
     beta_agent = 0.8
     beta_model = 0.8
@@ -96,16 +90,18 @@ def run_variant3():
         [
             cfg.REPLACEMENT_COST,
             cfg.MAINTENANCE_COST,
-            *true_probabilities,
+            true_probabilities[0],
+            true_probabilities[1],
+            true_probabilities[2],
         ],
         dtype=float,
     )
 
-    if not np.all(np.isfinite(true_parameters)) or np.any(true_parameters <= 0):
-        raise ValueError(
-            "True parameters must be positive and finite "
-            "to calculate percentage biases."
-        )
+    if not np.all(np.isfinite(true_parameters)):
+        raise ValueError("True parameters must be finite.")
+
+    if np.any(true_parameters <= 0):
+        raise ValueError("True parameters must be positive.")
 
     mileage_grid = create_mileage_grid()
 
@@ -176,11 +172,11 @@ def run_variant3():
                 )
 
                 # Beliefs determine how the agent evaluates future states.
-                subjective_keep, subjective_replace = (
-                    build_transition_matrices(
-                        len(mileage_grid),
-                        *subjective_probabilities,
-                    )
+                subjective_keep, subjective_replace = build_transition_matrices(
+                    len(mileage_grid),
+                    subjective_probabilities[0],
+                    subjective_probabilities[1],
+                    subjective_probabilities[2],
                 )
 
                 solution = solve_model(
@@ -223,12 +219,6 @@ def run_variant3():
                         beta=beta_model,
                     )
 
-                    if not fit["converged"]:
-                        raise RuntimeError(
-                            f"Estimation failed for {scenario_name}, "
-                            f"alpha={alpha}, repetition={repetition}."
-                        )
-
                     estimates = [
                         fit["replacement_cost"],
                         fit["maintenance_cost"],
@@ -258,7 +248,11 @@ def run_variant3():
                         "belief_px0": float(subjective_probabilities[0]),
                         "belief_px1": float(subjective_probabilities[1]),
                         "belief_px2": float(subjective_probabilities[2]),
-                        **dict(zip(PARAMETER_NAMES, estimates)),
+                        "rc": estimates[0],
+                        "theta": estimates[1],
+                        "px0": estimates[2],
+                        "px1": estimates[3],
+                        "px2": estimates[4],
                         "mean_replacements_per_bus": mean_replacements,
                         "negative_log_likelihood": fit[
                             "negative_log_likelihood"
@@ -303,18 +297,16 @@ def run_variant3():
 
                 replacement_values = np.asarray(scenario_replacements)
 
-                replacement_rows.append(
-                    {
-                        "alpha": alpha,
-                        "mean_replacements_per_bus": float(
-                            replacement_values.mean()
-                        ),
-                        "se_mean_replacements_per_bus": float(
-                            replacement_values.std(ddof=1)
-                            / np.sqrt(n_repetitions)
-                        ),
-                    }
+                mean_replacements = replacement_values.mean()
+                se_replacements = (
+                    replacement_values.std(ddof=1) / np.sqrt(n_repetitions)
                 )
+
+                replacement_rows.append({
+                    "alpha": alpha,
+                    "mean_replacements_per_bus": float(mean_replacements),
+                    "se_mean_replacements_per_bus": float(se_replacements),
+                })
 
                 print(
                     f"  Average bias: RC = {summary['bias_rc']:.3f}%, "

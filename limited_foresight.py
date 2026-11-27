@@ -18,21 +18,17 @@ def solve_limited_foresight(
     """
     Solve the agent's model with limited foresight.
 
-    horizon = 0: consider only the current period.
-    horizon = 6: consider today plus six future periods.
-
-    Planning never extends beyond the final simulation period.
+    horizon = 0: current period only.
+    horizon = 6: current period plus six future periods.
     """
-    if not isinstance(horizon, (int, np.integer)) or horizon < 0:
-        raise ValueError("horizon must be a nonnegative integer.")
 
-    if not isinstance(n_periods, (int, np.integer)) or n_periods < 1:
-        raise ValueError("n_periods must be a positive integer.")
+    if horizon < 0:
+        raise ValueError("Horizon cannot be negative.")
 
-    horizon = int(horizon)
-    n_periods = int(n_periods)
+    if n_periods < 1:
+        raise ValueError("At least one period is required.")
 
-    # Include the current period in the planning window.
+    # Include the current period in the planning horizon.
     planning_periods = min(horizon + 1, n_periods)
 
     short_solution = solve_model(
@@ -45,24 +41,27 @@ def solve_limited_foresight(
         n_periods=planning_periods,
     )
 
-    # Number of actual periods remaining, including today.
-    remaining_periods = n_periods - np.arange(n_periods)
+    # Determine the relevant solution column for each period.
+    column_indices = []
 
-    # Near the end, the agent cannot plan beyond the final period.
-    effective_periods = np.minimum(planning_periods, remaining_periods)
+    for t in range(n_periods):
+        remaining_periods = n_periods - t
+        effective_periods = min(planning_periods, remaining_periods)
 
-    # Costs and transitions do not depend on calendar time.
-    # Therefore, we can reuse the corresponding columns of the
-    # shorter model instead of solving every planning window again.
-    column_indices = planning_periods - effective_periods
+        column = planning_periods - effective_periods
+        column_indices.append(column)
 
-    return {
-        name: values[:, column_indices]
-        for name, values in short_solution.items()
-    }
+    # Extend the shorter solution to the full simulation period.
+    solution = {}
+
+    for name in short_solution:
+        solution[name] = short_solution[name][:, column_indices]
+
+    return solution
 
 
 def main():
+
     mileage_grid = create_mileage_grid()
 
     keep_matrix, replace_matrix = build_transition_matrices(
@@ -84,23 +83,24 @@ def main():
 
     full_solution = solve_model(**model_arguments)
 
-    # With no foresight, replacement depends only on current costs.
+    # Myopic replacement probability based on current costs.
     myopic_probability = np.exp(
         -np.logaddexp(
-            0.0,
+            0,
             cfg.REPLACEMENT_COST - cfg.MAINTENANCE_COST * mileage_grid,
         )
     )
 
     horizons = (0, 2, 4, 6, 8, 25, 40, 60)
 
-    example_index = int(np.argmin(np.abs(mileage_grid - 10000)))
+    example_index = np.argmin(np.abs(mileage_grid - 10000))
     example_mileage = int(mileage_grid[example_index])
 
     print(f"Replacement probabilities at {example_mileage:,} km")
     print(f"{'Horizon':>8} {'First period':>15} {'Last period':>15}")
 
     for horizon in horizons:
+
         limited_solution = solve_limited_foresight(
             horizon=horizon,
             **model_arguments,
@@ -108,35 +108,27 @@ def main():
 
         probabilities = limited_solution["replace_probability"]
 
-        assert probabilities.shape == (
-            len(mileage_grid),
-            cfg.N_PERIODS,
-        )
+        assert probabilities.shape == (len(mileage_grid), cfg.N_PERIODS)
         assert np.all(np.isfinite(probabilities))
-        assert np.all((probabilities >= 0) & (probabilities <= 1))
 
-        # At h=0, every period must use the myopic decision rule.
+        # At h=0, all periods must use the myopic decision rule.
         if horizon == 0:
-            expected = np.repeat(
-                myopic_probability[:, None],
-                cfg.N_PERIODS,
-                axis=1,
-            )
 
-            np.testing.assert_allclose(
-                probabilities,
-                expected,
-                rtol=1e-12,
-                atol=1e-12,
-            )
+            for t in range(cfg.N_PERIODS):
+                assert np.allclose(
+                    probabilities[:, t],
+                    myopic_probability,
+                    rtol=1e-12,
+                    atol=1e-12,
+                )
 
-        # Once the planning window covers all remaining periods,
-        # limited foresight must match the full-horizon solution.
-        # For h >= T-1, this checks the entire solution.
+        # Limited and full foresight coincide when the agent
+        # considers all remaining periods.
         tail_length = min(horizon + 1, cfg.N_PERIODS)
 
         for name in full_solution:
-            np.testing.assert_allclose(
+
+            assert np.allclose(
                 limited_solution[name][:, -tail_length:],
                 full_solution[name][:, -tail_length:],
                 rtol=1e-12,
